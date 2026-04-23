@@ -489,11 +489,28 @@ header{
   position:relative;z-index:5;
   margin-bottom:-10px;
   flex-shrink:0;align-self:flex-end;margin-right:12px;
+  border-radius:50%;
 }
-.tlogo{width:72px;height:72px;object-fit:contain;display:block;
-  filter:drop-shadow(0 4px 16px rgba(0,0,0,.8));}
+.tlogo{
+  width:72px;height:72px;object-fit:cover;display:block;
+  border-radius:50%;
+  border:3px solid rgba(255,255,255,.25);
+  box-shadow:0 0 16px rgba(0,0,0,.8),0 0 0 2px rgba(255,255,255,.08);
+  background:#111;
+}
 .p1 .tlogo{width:90px;height:90px}
 .p1 .tlogo-wrap{margin-bottom:-14px;margin-right:16px}
+
+/* Team color ring on logo */
+.pslot .tlogo{border-color:rgba(255,255,255,.2)}
+.p1 .tlogo{border-width:4px}
+
+/* Color-specific logo borders — injected via JS per team */
+.tlogo-blue  {border-color:#3a7fff!important;box-shadow:0 0 16px rgba(0,0,0,.8),0 0 8px rgba(58,127,255,.5)!important;}
+.tlogo-gold  {border-color:#c8900a!important;box-shadow:0 0 16px rgba(0,0,0,.8),0 0 8px rgba(200,144,10,.5)!important;}
+.tlogo-green {border-color:#2d9e3a!important;box-shadow:0 0 16px rgba(0,0,0,.8),0 0 8px rgba(45,158,58,.5)!important;}
+.tlogo-red   {border-color:#cc2222!important;box-shadow:0 0 16px rgba(0,0,0,.8),0 0 8px rgba(204,34,34,.5)!important;}
+.tlogo-grey  {border-color:#888!important;box-shadow:0 0 16px rgba(0,0,0,.8),0 0 8px rgba(136,136,136,.4)!important;}
 
 /* ── TEAM CARD ── */
 .team-card{
@@ -593,8 +610,8 @@ header{
 .pslot.compact .team-card{gap:4px;padding:7px 10px 10px}
 .pslot.compact .rank-num{font-size:110px!important;top:-18px!important}
 .pslot.compact.p1 .rank-num{font-size:130px!important}
-.pslot.compact .tlogo{width:52px!important;height:52px!important}
-.pslot.compact.p1 .tlogo{width:64px!important;height:64px!important}
+.pslot.compact .tlogo{width:52px!important;height:52px!important;border-radius:50%!important}
+.pslot.compact.p1 .tlogo{width:64px!important;height:64px!important;border-radius:50%!important}
 .pslot.compact .tname{font-size:11px!important}
 .pslot.compact .score-box{font-size:12px!important;padding:3px 7px!important}
 .pslot.compact.p1 .score-box{font-size:15px!important}
@@ -610,8 +627,8 @@ header{
 .pslot.compact .skull-count{font-size:13px!important}
 .pslot.compact .skull-icon{width:11px!important;height:11px!important}
 .pslot.compact .skull-count-row{margin-bottom:2px}
-.pslot.p2.compact,.pslot.p3.compact{width:240px}
-.pslot.p1.compact{width:300px}
+.pslot.p2.compact,.pslot.p3.compact{width:256px}
+.pslot.p1.compact{width:320px}
 .podium.has-compact{align-items:center;padding-bottom:8px}
 
 /* Scale handled by JS dynamically */
@@ -1871,7 +1888,7 @@ function buildSlotHTML(catId, teamIdx, cls, rank, visible, enterAnim) {
   const t   = cat.teams[teamIdx];
   if (!visible) return `<div class="pslot ${cls}" style="opacity:0;pointer-events:none;"></div>`;
   const logoSrc = getLogoSrc(catId, teamIdx);
-  const isCompact = cat.stats.length >= 5;
+  const isCompact = cat.stats.length >= 7;
   const compactCls = isCompact ? ' compact' : '';
   const enterCls = enterAnim ? ` p-enter${rank===1?' p-glow':''}` : (rank===1?' p-glow':'');
 
@@ -1892,7 +1909,7 @@ function buildSlotHTML(catId, teamIdx, cls, rank, visible, enterAnim) {
 
   return `
   <div class="pslot ${cls}${compactCls}${enterCls}">
-    <div class="tlogo-wrap"><img class="tlogo" src="${logoSrc}" alt="logo"></div>
+    <div class="tlogo-wrap"><img class="tlogo tlogo-${t.color}" src="${logoSrc}" alt="logo"></div>
     <div class="team-card">
       <div class="rank-num">${rank}</div>
       <div class="card-top">
@@ -1912,23 +1929,58 @@ function buildStatPanels(cat, t, compact=false) {
   const panels = [];
   const hasKey = (k) => cat.stats.some(s => s.key === k);
 
+  if (compact) {
+    // ── COMPACT (Effective): all stats packed into 2 mini rows ──
+    const pct = Math.max(0, Math.min(100, parseInt(t.stats.distPct)||85));
+    const holeCount = parseInt(t.stats.hole)||0;
+    const holeIcons = Array.from({length:Math.min(holeCount,5)},()=>
+      `<img src="${ASSETS.icon_grid}" style="width:9px;height:9px;object-fit:contain" alt="">`).join('');
+    return `
+      <div class="stat-panels" style="gap:3px">
+        <div class="stat-panel" style="flex:1">
+          <div class="sp-label" style="font-size:6px">Picked / Waste</div>
+          <div style="display:flex;gap:5px;align-items:baseline">
+            <span class="sp-val" style="font-size:11px">${t.stats.picked||'0'}</span>
+            <span style="font-size:8px;color:rgba(255,255,255,.3)">/</span>
+            <span class="sp-val" style="font-size:11px;color:#FFD700">${t.stats.waste||'0'}</span>
+          </div>
+        </div>
+        <div class="stat-panel" style="flex:1">
+          <div class="sp-label" style="font-size:6px;margin-bottom:2px">Distance</div>
+          <div class="dist-slider-track" style="height:5px;margin:1px 0">
+            <div class="dist-slider-fill" style="width:${pct}%"></div>
+            <div class="dist-slider-dot" style="left:calc(${pct}% - 5px);width:9px;height:9px"></div>
+          </div>
+          <span class="sp-val" style="font-size:10px">${t.stats.dist}</span>
+        </div>
+      </div>
+      <div class="stat-panels" style="gap:3px">
+        <div class="stat-panel" style="flex:1;display:flex;align-items:center;gap:5px">
+          <div style="position:relative;width:30px;height:30px;flex-shrink:0">
+            <img style="width:100%;height:100%;object-fit:contain" src="${ASSETS[t.gaugeKey||'gauge_1']}" alt="">
+            <div style="position:absolute;bottom:3px;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:5px;font-weight:700;color:#fff;white-space:nowrap;text-align:center">${t.stats.flow}<br><span style="font-size:4.5px;opacity:.7">LBM/S</span></div>
+          </div>
+          <div><div class="sp-label" style="font-size:6px">Flow Rate</div></div>
+        </div>
+        <div class="stat-panel" style="flex:1">
+          <div class="sp-label" style="font-size:6px">Eff. Hole</div>
+          <span class="sp-val" style="font-size:12px">${holeCount}</span>
+          <div style="display:flex;flex-wrap:wrap;gap:1px;margin-top:1px">${holeIcons}</div>
+        </div>
+      </div>`;
+  }
+
+  // ── NORMAL mode ──
   if (hasKey('waste') || hasKey('dist') || hasKey('picked')) {
     panels.push(`<div class="stat-panel">
       <div style="display:flex;align-items:center;gap:5px">
-        <img src="${ASSETS.icon_o2_tank}" alt="" style="height:${compact?'20':'28'}px;width:auto;object-fit:contain;flex-shrink:0">
-        <div style="display:flex;gap:${compact?'6':'10'}px;align-items:flex-end">
-          <div>
-            <div class="sp-label">Picked</div>
-            <span class="sp-val">${t.stats.picked||t.stats.waste||'0'}</span>
-          </div>
-          <div>
-            <div class="sp-label">Waste</div>
-            <span class="sp-val" style="color:#FFD700">${t.stats.waste||'0'}</span>
-          </div>
+        <img src="${ASSETS.icon_o2_tank}" alt="" style="height:28px;width:auto;object-fit:contain;flex-shrink:0">
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div><div class="sp-label">Picked</div><span class="sp-val">${t.stats.picked||t.stats.waste||'0'}</span></div>
+          <div><div class="sp-label">Waste</div><span class="sp-val" style="color:#FFD700">${t.stats.waste||'0'}</span></div>
         </div>
       </div>
     </div>`);
-
     const pct = Math.max(0, Math.min(100, parseInt(t.stats.distPct)||85));
     panels.push(`<div class="stat-panel dist-panel">
       <div class="sp-label" style="margin-bottom:3px">Distance</div>
@@ -1936,33 +1988,29 @@ function buildStatPanels(cat, t, compact=false) {
         <div class="dist-slider-fill" style="width:${pct}%"></div>
         <div class="dist-slider-dot" style="left:calc(${pct}% - 6px)"></div>
       </div>
-      <div class="sp-val" style="font-size:${compact?'11':'16'}px;margin-top:3px">${t.stats.dist}</div>
+      <div class="sp-val" style="font-size:16px;margin-top:3px">${t.stats.dist}</div>
     </div>`);
   }
 
   if (hasKey('flow')) {
-    const gaugeSize = compact ? 36 : 52;
     panels.push(`<div class="stat-panel">
-      <div class="sp-label" style="font-size:${compact?'6':'7'}px">LBM/S Flow Rate</div>
-      <div style="position:relative;width:${gaugeSize}px;height:${gaugeSize}px;flex-shrink:0">
+      <div class="sp-label" style="font-size:7px">LBM/S Flow Rate</div>
+      <div style="position:relative;width:52px;height:52px;flex-shrink:0">
         <img style="width:100%;height:100%;object-fit:contain" src="${ASSETS[t.gaugeKey||'gauge_1']}" alt="">
-        <div style="position:absolute;bottom:${compact?'6':'9'}px;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:${compact?'6':'8'}px;font-weight:700;color:#fff;white-space:nowrap;text-align:center">${t.stats.flow}<br><span style="font-size:${compact?'5':'6'}px;opacity:.7">LBM/S</span></div>
+        <div style="position:absolute;bottom:9px;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:#fff;white-space:nowrap;text-align:center">${t.stats.flow}<br><span style="font-size:6px;opacity:.7">LBM/S</span></div>
       </div>
     </div>`);
   }
 
   if (hasKey('hole')) {
     const holeCount = parseInt(t.stats.hole)||0;
-    const maxIcons = compact ? 5 : 9;
-    const iconSize = compact ? 10 : 13;
-    const holeIcons = Array.from({length:Math.min(holeCount,maxIcons)},()=>
-      `<img src="${ASSETS.icon_grid}" style="width:${iconSize}px;height:${iconSize}px;object-fit:contain" alt="">`).join('');
-    // In compact mode with skull+dnr, hole is merged into the skull row — skip here
+    const holeIcons = Array.from({length:Math.min(holeCount,9)},()=>
+      `<img src="${ASSETS.icon_grid}" style="width:13px;height:13px;object-fit:contain" alt="">`).join('');
     const hasBothSkulls = cat.stats.some(s=>s.key==='seal') || cat.stats.some(s=>s.key==='dnr');
-    if (!(compact && hasBothSkulls)) {
+    if (!hasBothSkulls) {
       panels.push(`<div class="stat-panel">
         <div class="sp-label">Effective Hole</div>
-        <div class="sp-row"><span class="sp-val" style="font-size:${compact?'14':'18'}px">${holeCount}</span></div>
+        <div class="sp-row"><span class="sp-val" style="font-size:18px">${holeCount}</span></div>
         <div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">${holeIcons}</div>
       </div>`);
     }
@@ -1977,36 +2025,26 @@ function buildSkullPanel(cat, t, compact=false) {
   const hasDnr  = cat.stats.some(s=>s.key==='dnr');
   const hasHole = cat.stats.some(s=>s.key==='hole');
 
-  // Compact: merge DNR + SEAL + Hole into one horizontal row
-  if (compact && (hasDnr || hasSeal) && hasHole) {
+  // Compact: merge DNR + SEAL into one horizontal row (hole already in stat panels)
+  if (compact && (hasDnr || hasSeal)) {
     const dnrCount  = parseInt(t.stats.dnr)||0;
     const sealCount = parseInt(t.stats.seal)||0;
-    const holeCount = parseInt(t.stats.hole)||0;
     const maxIcons  = 5;
-
     const dnrIcons  = Array.from({length:Math.min(dnrCount,maxIcons)},()=>
       `<img class="skull-icon" src="${ASSETS.skull_orange}" alt="">`).join('');
     const sealIcons = Array.from({length:Math.min(sealCount,maxIcons)},()=>
       `<img class="skull-icon" src="${ASSETS.skull_red_sq}" alt="">`).join('');
-    const holeIcons = Array.from({length:Math.min(holeCount,maxIcons)},()=>
-      `<img src="${ASSETS.icon_grid}" style="width:10px;height:10px;object-fit:contain" alt="">`).join('');
-
     return `<div style="display:flex;gap:4px">
       ${hasDnr ? `<div class="skull-panel" style="flex:1">
-        <div class="skull-label">Dec. MNR</div>
-        <div class="skull-count-row"><span class="skull-count">${dnrCount}</span><span class="skull-unit"> P</span></div>
+        <div class="skull-label" style="font-size:6px">Dec. MNR</div>
+        <div class="skull-count-row"><span class="skull-count" style="font-size:12px">${dnrCount}</span><span class="skull-unit"> P</span></div>
         <div class="skull-grid">${dnrIcons}</div>
       </div>` : ''}
       ${hasSeal ? `<div class="skull-panel" style="flex:1">
-        <div class="skull-label">Dec. S.E.A.L.</div>
-        <div class="skull-count-row"><span class="skull-count">${sealCount}</span><span class="skull-unit"> P</span></div>
+        <div class="skull-label" style="font-size:6px">Dec. S.E.A.L.</div>
+        <div class="skull-count-row"><span class="skull-count" style="font-size:12px">${sealCount}</span><span class="skull-unit"> P</span></div>
         <div class="skull-grid">${sealIcons}</div>
       </div>` : ''}
-      <div class="skull-panel" style="flex:1">
-        <div class="skull-label">Eff. Hole</div>
-        <div class="skull-count-row"><span class="skull-count">${holeCount}</span></div>
-        <div class="skull-grid">${holeIcons}</div>
-      </div>
     </div>`;
   }
 
@@ -2051,7 +2089,7 @@ function buildSkullPanel(cat, t, compact=false) {
 function renderSlide() {
   const cat = CATS[currentCat];
   document.getElementById('tbTitle').textContent = cat.label;
-  const isCompact = cat.stats.length >= 5;
+  const isCompact = cat.stats.length >= 7;
   const order = [
     {teamIdx:1, cls:'p2', rank:2},
     {teamIdx:0, cls:'p1', rank:1},
@@ -2156,7 +2194,7 @@ function makeAnnounceHTML(catId) {
 // Build podium slide HTML for a step
 function makePresSlideHTML(catId, shownCount) {
   const cat = CATS[catId];
-  const isCompact = cat.stats.length >= 5;
+  const isCompact = cat.stats.length >= 7;
   const order = [
     {teamIdx:1, cls:'p2', rank:2},
     {teamIdx:0, cls:'p1', rank:1},
