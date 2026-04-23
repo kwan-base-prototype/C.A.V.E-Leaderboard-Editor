@@ -324,10 +324,11 @@ header{
 .fb-pass-wrap .fb-input{padding-right:40px}
 .fb-eye{
   position:absolute;right:10px;top:50%;transform:translateY(-50%);
-  background:none;border:none;cursor:pointer;font-size:14px;opacity:.4;
+  background:none;border:none;cursor:pointer;font-size:14px;
+  color:#fff;opacity:.5;
   transition:opacity .15s;padding:4px;
 }
-.fb-eye:hover{opacity:.8}
+.fb-eye:hover{opacity:1}
 
 .fb-err{font-size:11px;color:#ff6868;min-height:14px;text-align:center;font-family:'Rajdhani',sans-serif}
 .fb-btn{
@@ -683,10 +684,10 @@ header{
 <div id="presOverlay" style="display:none;position:fixed;inset:0;z-index:10000;background:#000;overflow:hidden;">
 
   <!-- STAGE -->
-  <div id="presStage" style="width:100%;height:100%;position:relative;display:flex;align-items:center;justify-content:center;"></div>
+  <div id="presStage" style="width:100%;height:calc(100% - 80px);position:relative;display:flex;align-items:center;justify-content:center;"></div>
 
   <!-- NAV CONTROLS -->
-  <div id="presNav" style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;z-index:10010;opacity:0;transition:opacity .3s;">
+  <div id="presNav" style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;z-index:10010;opacity:0;transition:opacity .3s;">
     <button class="pnav-btn" onclick="presStep(-1)">&#9664; PREV</button>
     <div id="presProgress" style="display:flex;gap:6px;align-items:center;"></div>
     <button class="pnav-btn" onclick="presStep(1)">NEXT &#9654;</button>
@@ -2133,7 +2134,7 @@ function buildPresSteps() {
 }
 
 function buildPresScale() {
-  const vw = window.innerWidth, vh = window.innerHeight;
+  const vw = window.innerWidth, vh = window.innerHeight - 80; // reserve 80px for nav
   return Math.min(vw / 960, vh / 540) * 0.94;
 }
 
