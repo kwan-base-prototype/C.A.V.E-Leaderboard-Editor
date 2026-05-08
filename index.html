@@ -47,6 +47,14 @@ header{
   transition:all .2s;flex-shrink:0;margin-right:8px;
 }
 .btn-present:hover{transform:scale(1.04);box-shadow:0 0 16px rgba(0,200,150,.4)}
+.btn-import{
+  background:linear-gradient(135deg,#0a1f3a,#005fa3);
+  color:#fff;border:none;padding:9px 22px;
+  font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;
+  cursor:pointer;clip-path:polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+  transition:all .2s;flex-shrink:0;margin-right:8px;
+}
+.btn-import:hover{transform:scale(1.04);box-shadow:0 0 16px rgba(0,95,163,.4)}
 
 /* APP BODY */
 .app{display:flex;height:calc(100vh - 56px);overflow:hidden}
@@ -648,6 +656,8 @@ header{
     <div class="hdr-sub">C.A.V.E. — Base Playhouse</div>
   </div>
   <div class="spacer"></div>
+  <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
+  <button class="btn-import" onclick="document.getElementById('csvFileInput').click()">⬆ Import CSV</button>
   <button class="btn-present" onclick="startPresentation()">▶ Present</button>
   <button class="btn-export" onclick="doExport()">⬇ Export PNG</button>
 </header>
@@ -1803,13 +1813,117 @@ function updateField(cat, idx, field, val) {
   renderSlide();
   if (window._pushToRealtime) window._pushToRealtime();
 }
+function flowToGaugeKey(f) {
+  if (f <  10) return 'gauge_1';
+  if (f <  20) return 'gauge_2';
+  if (f <  36) return 'gauge_3';
+  if (f <  45) return 'gauge_4';
+  return 'gauge_5';
+}
+
 function updateStat(cat, idx, key, val) {
   CATS[cat].teams[idx].stats[key] = val;
+  if (key === 'dist') {
+    const m = parseFloat(String(val).replace(/[^\d.]/g, ''));
+    CATS[cat].teams[idx].stats.distPct = isNaN(m) ? 0 : Math.min(100, Math.round(m / 1390 * 100));
+    renderSidebar();
+  }
+  if (key === 'flow') {
+    CATS[cat].teams[idx].gaugeKey = flowToGaugeKey(parseFloat(val) || 0);
+    renderSidebar();
+  }
   renderSlide();
   if (window._pushToRealtime) window._pushToRealtime();
 }
 
+function handleCSVImport(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try { importFromCSV(e.target.result); }
+    catch(err) { alert('CSV import error: ' + err.message); }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
 
+function parseCSVLine(line) {
+  const cells = [];
+  let i = 0, cell = '';
+  while (i < line.length) {
+    if (line[i] === '"') {
+      i++;
+      while (i < line.length && line[i] !== '"') cell += line[i++];
+      i++; // skip closing quote — i now points to the separator comma
+      continue; // skip outer i++ so the comma isn't eaten
+    } else if (line[i] === ',') {
+      cells.push(cell.trim()); cell = '';
+    } else {
+      cell += line[i];
+    }
+    i++;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function importFromCSV(text) {
+  const rows = text.split('\n').map(l => l.replace(/\r$/, '')).filter(l => l.trim()).map(parseCSVLine);
+
+  const SECTIONS = {
+    'BEST SEAL Team':         { cat: 'seal',      scoreCol: 11 },
+    'BEST MNR Team':          { cat: 'dnr',       scoreCol: 12 },
+    'Most Successful Rescue': { cat: 'rescue',    scoreCol: 13 },
+    'Most Effective Team':    { cat: 'effective', scoreCol: 14 },
+  };
+  const sectionStarts = {};
+  rows.forEach((row, i) => { if (SECTIONS[row[0]]) sectionStarts[row[0]] = i; });
+
+  const maxDist = 1390;
+
+  const numVal = s => parseFloat((s || '0').replace(/,/g, '')) || 0;
+  const numStr = s => String(numVal(s));
+  const floatStr = (s, dec=2) => numVal(s).toFixed(dec);
+
+  for (const [sectionName, { cat, scoreCol }] of Object.entries(SECTIONS)) {
+    const startIdx = sectionStarts[sectionName];
+    if (startIdx == null) continue;
+
+    const dataRows = rows.slice(startIdx + 1, startIdx + 11)
+      .filter(r => r[1] && r[1] !== 'No Data' && r[1] !== 'TEAM_NAME');
+
+    dataRows.sort((a, b) => numVal(b[scoreCol]) - numVal(a[scoreCol]));
+
+    dataRows.slice(0, 3).forEach((row, idx) => {
+      const team = CATS[cat].teams[idx];
+      const survivors = numVal(row[2]);
+      const dist = numVal(row[5]);
+      const distPct = Math.min(100, Math.round((dist / maxDist) * 100));
+
+      team.name  = row[1] || '';
+      team.score = (row[scoreCol] || '0').trim();
+
+      team.stats.people  = numStr(row[2]);
+      team.stats.seal    = numStr(row[6]);
+      team.stats.dnr     = numStr(row[7]);
+      team.stats.flow    = floatStr(row[8]);
+      team.gaugeKey      = flowToGaugeKey(numVal(row[8]));
+      team.stats.hole    = numStr(row[9]);
+      team.stats.picked  = numStr(row[3]);
+      team.stats.waste   = floatStr(row[15]);
+      team.stats.dist    = dist > 0 ? dist + ' m' : '0 m';
+      team.stats.distPct = distPct;
+
+      team.portraits.forEach((p, pi) => { p.alive = pi < survivors; });
+    });
+  }
+
+  renderSidebar();
+  renderSlide();
+  if (window._pushToRealtime) window._pushToRealtime();
+  alert('นำเข้าข้อมูล CSV สำเร็จ!');
+}
 
 // ── AUDIO ──
 let _fanfareAudio = null;
@@ -1817,13 +1931,28 @@ function playFanfare() {
   try {
     if (_fanfareAudio) { _fanfareAudio.pause(); _fanfareAudio.currentTime = 0; }
     _fanfareAudio = new Audio(ASSETS.fanfare);
-    _fanfareAudio.volume = 0.75;
+    _fanfareAudio.volume = 0.8;
     _fanfareAudio.play().catch(()=>{});
   } catch(e) {}
 }
 
 function stopFanfare() {
   if (_fanfareAudio) { _fanfareAudio.pause(); _fanfareAudio.currentTime = 0; }
+}
+
+let _adventureAudio = null;
+function playAdventure(file) {
+  try {
+    if (_adventureAudio) { _adventureAudio.pause(); _adventureAudio.currentTime = 0; }
+    _adventureAudio = new Audio(file);
+    _adventureAudio.volume = 0.8;
+    _adventureAudio.loop = true;
+    _adventureAudio.play().catch(()=>{});
+  } catch(e) {}
+}
+
+function stopAdventure() {
+  if (_adventureAudio) { _adventureAudio.pause(); _adventureAudio.currentTime = 0; }
 }
 
 // ── OVERVIEW SLIDE (present) — shows per-team data for current category ──
@@ -2318,11 +2447,18 @@ function renderPresStep(idx) {
   } else if (step.type === 'announce') {
     html = makeAnnounceHTML(step.catId);
     label.textContent = CATS[step.catId].label + '  —  ANNOUNCEMENT';
+    const _catKeys = Object.keys(CATS);
+    if (step.catId !== _catKeys[_catKeys.length - 1]) {
+      playAdventure('Adventure Main.mp3');
+    } else {
+      playAdventure('Adventure Cut.mp3');
+    }
   } else {
     html = makePresSlideHTML(step.catId, step.shown);
     const names = {3:'3RD PLACE', 2:'2ND PLACE', 1:'1ST PLACE REVEAL'};
     label.textContent = CATS[step.catId].label + '  —  ' + names[step.rankShown];
     if (step.shown === 3) setTimeout(()=> spawnConfetti(stage), 800);
+    stopAdventure();
     playFanfare();
   }
   newWrap.innerHTML = html;
@@ -2375,6 +2511,7 @@ function startPresentation() {
   const stage   = document.getElementById('presStage');
   stage.innerHTML = '';
   label.style.opacity = '0';
+  nav.style.display = 'flex';
   nav.style.opacity = '1';
   overlay.style.display = 'block';
   document.addEventListener('keydown', onPresKey);
@@ -2388,6 +2525,7 @@ function closePresentation() {
   document.removeEventListener('keydown', onPresKey);
   clearTimeout(presTimer);
   stopFanfare();
+  stopAdventure();
 }
 
 function onPresKey(e) {
