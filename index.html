@@ -1147,8 +1147,7 @@ onAuthStateChanged(auth, user => {
     document.getElementById('syncUser').textContent = nameDisplay;
     setSyncStatus('green', 'เชื่อมต่อแล้ว');
     subscribeRealtime(user.uid);
-    // Show home page
-    window.showHome();
+    handleRoute();
   } else {
     _currentUser = null;
     document.getElementById('fbLoginOverlay').style.display = 'flex';
@@ -1238,8 +1237,10 @@ window.doLogout = async function() {
 
 // ── HOME PAGE ──
 let _activeLeaderboardId = null;
+let _routerActive = false;
 
 window.showHome = function() {
+  if (!_routerActive) routerNavigate('/');
   document.getElementById('homeOverlay').style.display = 'flex';
   loadHomeLeaderboards();
 };
@@ -1332,6 +1333,7 @@ window.openLeaderboard = async function(id, name) {
     const snap = await getDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id));
     if (!snap.exists()) { alert('ไม่พบข้อมูล'); return; }
     const data = snap.data();
+    if (!name) name = data.name || id;
     if (data.cats) {
       Object.entries(data.cats).forEach(([catId, catData]) => {
         if (!window.CATS[catId]) return;
@@ -1371,6 +1373,7 @@ window.openLeaderboard = async function(id, name) {
     window.saveToCloud = window._saveLbOverride;
     window.renderSidebar(); window.renderSlide();
     hideHome();
+    if (!_routerActive) routerNavigate('/leaderboards/' + id + '/' + currentCat);
   } catch(e) { alert('เกิดข้อผิดพลาด: ' + e.message); }
 };
 
@@ -1650,6 +1653,7 @@ function switchCat(cat) {
   buildCatTabs();
   renderSidebar();
   renderSlide();
+  if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/' + cat);
 }
 
 // ── SIDEBAR ──
@@ -2504,16 +2508,18 @@ function presStep(dir) {
   if (next < 0 || next >= presSteps.length) return;
   presIdx = next;
   renderPresStep(presIdx);
+  if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/present/' + presIdx);
 }
 
 function presJump(idx) {
   presIdx = idx;
   renderPresStep(presIdx);
+  if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/present/' + presIdx);
 }
 
-function startPresentation() {
+function startPresentation({ startStep = 0 } = {}) {
   buildPresSteps();
-  presIdx = 0;
+  presIdx = startStep;
   const overlay = document.getElementById('presOverlay');
   const nav     = document.getElementById('presNav');
   const label   = document.getElementById('presLabel');
@@ -2524,8 +2530,9 @@ function startPresentation() {
   nav.style.opacity = '1';
   overlay.style.display = 'block';
   document.addEventListener('keydown', onPresKey);
+  if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/present/' + presIdx);
   // slight delay so overlay paints black first before slide fades in
-  requestAnimationFrame(() => renderPresStep(0));
+  requestAnimationFrame(() => renderPresStep(presIdx));
 }
 
 function closePresentation() {
@@ -2535,6 +2542,7 @@ function closePresentation() {
   clearTimeout(presTimer);
   stopFanfare();
   stopAdventure();
+  if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/' + currentCat);
 }
 
 function onPresKey(e) {
@@ -2593,6 +2601,80 @@ function makeDefaultCats() {
   };
 }
 window.makeDefaultCats = makeDefaultCats;
+
+// ── ROUTER ──
+function routerNavigate(path, { replace = false } = {}) {
+  if (replace) history.replaceState(null, '', path);
+  else history.pushState(null, '', path);
+}
+
+async function handleRoute() {
+  if (!_currentUser) return;
+  const segments = location.pathname.split('/').filter(s => s !== '');
+  _routerActive = true;
+  try {
+    // No segments → home
+    if (segments.length === 0) {
+      closePresIfOpen();
+      window.showHome();
+      return;
+    }
+
+    // Unknown root → redirect home
+    if (segments[0] !== 'leaderboards' || !segments[1]) {
+      history.replaceState(null, '', '/');
+      closePresIfOpen();
+      window.showHome();
+      return;
+    }
+
+    const id    = segments[1];
+    const third = segments[2]; // category, 'present', or undefined
+    const VALID_CATS = Object.keys(CATS);
+
+    // Load leaderboard if not already active
+    if (id !== _activeLeaderboardId) {
+      const snap = await getDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id));
+      if (!snap.exists()) {
+        history.replaceState(null, '', '/');
+        window.showHome();
+        return;
+      }
+      await window.openLeaderboard(id, snap.data().name || id);
+    }
+
+    if (third === 'present') {
+      const step = Math.max(0, parseInt(segments[3]) || 0);
+      window.hideHome();
+      closePresIfOpen();
+      startPresentation({ startStep: step });
+    } else {
+      closePresIfOpen();
+      window.hideHome();
+      const cat = VALID_CATS.includes(third) ? third : currentCat;
+      if (cat !== currentCat) switchCat(cat);
+      // Normalise URL if third was missing or invalid
+      if (!VALID_CATS.includes(third)) {
+        history.replaceState(null, '', '/leaderboards/' + id + '/' + currentCat);
+      }
+    }
+  } finally {
+    _routerActive = false;
+  }
+}
+
+function closePresIfOpen() {
+  if (document.getElementById('presOverlay').style.display !== 'none') {
+    document.getElementById('presOverlay').style.display = 'none';
+    document.getElementById('presStage').innerHTML = '';
+    document.removeEventListener('keydown', onPresKey);
+    clearTimeout(presTimer);
+    stopFanfare();
+    stopAdventure();
+  }
+}
+
+window.addEventListener('popstate', () => handleRoute());
 </script>
 </body>
 </html>
