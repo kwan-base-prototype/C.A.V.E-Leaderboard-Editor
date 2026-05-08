@@ -781,22 +781,14 @@ header{
   transform-origin:center center;
   will-change:opacity;
   backface-visibility:hidden;
-}
-
-/* ── TRANSITION STATES ── */
-.pres-wrapper.state-enter{
-  opacity:0;
-  animation:none;
-}
-.pres-wrapper.state-visible{
-  opacity:1;
-  transition:opacity .45s ease;
+  animation:presEnter .45s ease both;
 }
 .pres-wrapper.state-exit{
-  opacity:0;
-  transition:opacity .3s ease;
+  animation:presExit .3s ease both;
   pointer-events:none;
 }
+@keyframes presEnter{from{opacity:0}to{opacity:1}}
+@keyframes presExit{from{opacity:1}to{opacity:0}}
 
 /* ── INTERNAL ELEMENT ANIMATIONS (staggered, CSS only) ── */
 @keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
@@ -2412,7 +2404,7 @@ function renderPresStep(idx) {
 
   if (canReuse) {
     // Find the existing visible wrapper and update it in-place
-    const existingWrap = stage.querySelector('.pres-wrapper.state-visible');
+    const existingWrap = stage.querySelector('.pres-wrapper:not(.state-exit)');
     if (existingWrap) {
       // Reveal the newly added slot — find hidden pslots and show the right one
       const rankToReveal = step.rankShown; // e.g. 2 means reveal rank-2 slot
@@ -2450,7 +2442,7 @@ function renderPresStep(idx) {
 
   // Full slide transition for non-podium steps or first reveal
   const newWrap = document.createElement('div');
-  newWrap.className = 'pres-wrapper state-enter';
+  newWrap.className = 'pres-wrapper state-visible';
   newWrap.style.cssText = `transform: translate(-50%, -50%) scale(${scale});margin-left:0;margin-top:0;`;
 
   let html = '';
@@ -2475,19 +2467,15 @@ function renderPresStep(idx) {
     playFanfare();
   }
   newWrap.innerHTML = html;
-  stage.appendChild(newWrap);
 
-  // Fade out old wrappers
-  stage.querySelectorAll('.pres-wrapper.state-visible').forEach(old => {
-    old.classList.replace('state-visible','state-exit');
+  // Fade out old wrappers BEFORE appending new one (so querySelectorAll won't catch newWrap)
+  stage.querySelectorAll('.pres-wrapper:not(.state-exit)').forEach(old => {
+    old.classList.remove('state-visible');
+    old.classList.add('state-exit');
     setTimeout(()=> old.remove(), 350);
   });
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      newWrap.classList.replace('state-enter','state-visible');
-    });
-  });
+  stage.appendChild(newWrap);
 
   label.style.opacity = '1';
   clearTimeout(presTimer);
@@ -2603,8 +2591,10 @@ function makeDefaultCats() {
 window.makeDefaultCats = makeDefaultCats;
 
 // ── ROUTER ──
+let _suppressNextHashChange = false;
 function routerNavigate(path, { replace = false } = {}) {
   const hash = '#' + path;
+  _suppressNextHashChange = true;
   if (replace) history.replaceState(null, '', hash);
   else history.pushState(null, '', hash);
 }
@@ -2677,7 +2667,10 @@ function closePresIfOpen() {
 }
 
 window.addEventListener('popstate', () => handleRoute());
-window.addEventListener('hashchange', () => handleRoute());
+window.addEventListener('hashchange', () => {
+  if (_suppressNextHashChange) { _suppressNextHashChange = false; return; }
+  handleRoute();
+});
 </script>
 </body>
 </html>
