@@ -2604,13 +2604,15 @@ window.makeDefaultCats = makeDefaultCats;
 
 // ── ROUTER ──
 function routerNavigate(path, { replace = false } = {}) {
-  if (replace) history.replaceState(null, '', path);
-  else history.pushState(null, '', path);
+  const hash = '#' + path;
+  if (replace) history.replaceState(null, '', hash);
+  else history.pushState(null, '', hash);
 }
 
 async function handleRoute() {
   if (!_currentUser) return;
-  const segments = location.pathname.split('/').filter(s => s !== '');
+  const hash = location.hash.slice(1) || '/';
+  const segments = hash.split('/').filter(s => s !== '');
   _routerActive = true;
   try {
     // No segments → home
@@ -2622,7 +2624,7 @@ async function handleRoute() {
 
     // Unknown root → redirect home
     if (segments[0] !== 'leaderboards' || !segments[1]) {
-      history.replaceState(null, '', '/');
+      history.replaceState(null, '', '#/');
       closePresIfOpen();
       window.showHome();
       return;
@@ -2636,7 +2638,7 @@ async function handleRoute() {
     if (id !== _activeLeaderboardId) {
       const snap = await getDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id));
       if (!snap.exists()) {
-        history.replaceState(null, '', '/');
+        history.replaceState(null, '', '#/');
         window.showHome();
         return;
       }
@@ -2655,7 +2657,7 @@ async function handleRoute() {
       if (cat !== currentCat) switchCat(cat);
       // Normalise URL if third was missing or invalid
       if (!VALID_CATS.includes(third)) {
-        history.replaceState(null, '', '/leaderboards/' + id + '/' + currentCat);
+        history.replaceState(null, '', '#/leaderboards/' + id + '/' + currentCat);
       }
     }
   } finally {
@@ -2675,6 +2677,7 @@ function closePresIfOpen() {
 }
 
 window.addEventListener('popstate', () => handleRoute());
+window.addEventListener('hashchange', () => handleRoute());
 </script>
 </body>
 </html>
