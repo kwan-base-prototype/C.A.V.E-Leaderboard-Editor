@@ -1228,6 +1228,11 @@ window.doLogout = async function() {
   await signOut(auth);
 };
 
+// Expose Firebase helpers for non-module scripts (handleRoute)
+window._db = db;
+window._getDoc = getDoc;
+window._doc = doc;
+
 // ── HOME PAGE ──
 window._activeLeaderboardId = null;
 let _routerActive = false;
@@ -2628,7 +2633,7 @@ async function handleRoute() {
 
     // Load leaderboard if not already active
     if (id !== _activeLeaderboardId) {
-      const snap = await getDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id));
+      const snap = await window._getDoc(window._doc(window._db, 'users', _currentUser.uid, 'leaderboards', id));
       if (!snap.exists()) {
         history.replaceState(null, '', '#/');
         window.showHome();
