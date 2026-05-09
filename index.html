@@ -1107,6 +1107,7 @@ const db   = getFirestore(app);
 const rtdb = getDatabase(app);
 
 let _currentUser = null;
+Object.defineProperty(window, '_currentUser', { get: () => _currentUser, set: v => { _currentUser = v; } });
 let _rtdbUnsub   = null;
 let _isSyncing   = false;
 
@@ -1230,6 +1231,7 @@ window.doLogout = async function() {
 // ── HOME PAGE ──
 let _activeLeaderboardId = null;
 let _routerActive = false;
+Object.defineProperty(window, '_routerActive', { get: () => _routerActive, set: v => { _routerActive = v; } });
 
 window.showHome = function() {
   if (!_routerActive) routerNavigate('/');
