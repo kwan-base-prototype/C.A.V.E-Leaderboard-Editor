@@ -1228,7 +1228,7 @@ window.doLogout = async function() {
 };
 
 // ── HOME PAGE ──
-let _activeLeaderboardId = null;
+window._activeLeaderboardId = null;
 let _routerActive = false;
 
 window.showHome = function() {
@@ -1259,7 +1259,7 @@ async function loadHomeLeaderboards() {
     snap.forEach(d => {
       const data = d.data();
       const updated = data.updatedAt?.toDate?.()?.toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) || '—';
-      const isActive = d.id === _activeLeaderboardId;
+      const isActive = d.id === window._activeLeaderboardId;
       const safeName = (data.name || 'ไม่มีชื่อ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       const safeNameAttr = (data.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,"\\'");
       const card = document.createElement('div');
@@ -1346,7 +1346,7 @@ window.openLeaderboard = async function(id, name) {
         });
       });
     }
-    _activeLeaderboardId = id;
+    window._activeLeaderboardId = id;
     window._activeLbName = name;
     // Update header
     const sub = document.querySelector('.hdr-sub');
@@ -1373,7 +1373,7 @@ window.deleteLeaderboard = async function(id, name) {
   if (!confirm(`ลบ "${name}" ?\nการดำเนินการนี้ไม่สามารถยกเลิกได้`)) return;
   try {
     await deleteDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id));
-    if (_activeLeaderboardId === id) _activeLeaderboardId = null;
+    if (window._activeLeaderboardId === id) window._activeLeaderboardId = null;
     await loadHomeLeaderboards();
   } catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
 };
@@ -1419,14 +1419,14 @@ function deserializeCats(data) {
 
 // ── Firestore Save/Load ──
 window.saveToCloud = async function() {
-  if (!_activeLeaderboardId) {
+  if (!window._activeLeaderboardId) {
     setSyncStatus('red', 'กรุณาเปิด Leaderboard ก่อนบันทึก');
     return;
   }
   if (!_currentUser) return;
   setSyncStatus('yellow', 'กำลังบันทึก...');
   try {
-    await setDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', _activeLeaderboardId), {
+    await setDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', window._activeLeaderboardId), {
       name: window._activeLbName || '',
       cats: serializeCats(),
       updatedAt: serverTimestamp(),
@@ -1439,14 +1439,14 @@ window.saveToCloud = async function() {
 };
 
 window.loadFromCloud = async function() {
-  if (!_activeLeaderboardId) {
+  if (!window._activeLeaderboardId) {
     setSyncStatus('red', 'กรุณาเปิด Leaderboard ก่อนโหลด');
     return;
   }
   if (!_currentUser) return;
   setSyncStatus('yellow', 'กำลังโหลด...');
   try {
-    const snap = await getDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', _activeLeaderboardId));
+    const snap = await getDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', window._activeLeaderboardId));
     if (snap.exists()) {
       deserializeCats(snap.data().cats);
       setSyncStatus('green', 'โหลดแล้ว ✓');
