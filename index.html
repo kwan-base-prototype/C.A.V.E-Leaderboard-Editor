@@ -2011,16 +2011,41 @@ function playRevealSound(rankShown) {
 
 let _adventureAudio = null;
 let _adventureFile  = null;
+const ADV_VOL     = 0.8;   // target background volume
+const ADV_FADE_MS = 1400;  // cross-fade duration when switching / starting tracks
+
+// Ramp an audio element's volume to `to` over `ms`, then run onDone (used for stop-after-fade)
+function _advFade(audio, to, ms, onDone) {
+  if (!audio) { if (onDone) onDone(); return; }
+  if (audio._fadeTimer) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; }
+  const from = audio.volume;
+  const steps = 30, stepMs = Math.max(16, ms / steps);
+  let i = 0;
+  audio._fadeTimer = setInterval(() => {
+    i++;
+    const v = from + (to - from) * (i / steps);
+    try { audio.volume = Math.max(0, Math.min(1, v)); } catch(e) {}
+    if (i >= steps) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; if (onDone) onDone(); }
+  }, stepMs);
+}
+
 function playAdventure(file) {
   try {
     // Same track already playing as looping BG — keep it going seamlessly, don't restart
     if (_adventureAudio && _adventureFile === file && !_adventureAudio.paused) return;
-    if (_adventureAudio) { _adventureAudio.pause(); _adventureAudio.currentTime = 0; }
+    const old = _adventureAudio;
     _adventureFile = file;
-    _adventureAudio = new Audio(file);
-    _adventureAudio.volume = 0.8;
-    _adventureAudio.loop = true;
-    _adventureAudio.play().catch(()=>{});
+    // Start the new track silent and fade it in
+    const next = new Audio(file);
+    next.loop = true;
+    next.volume = 0;
+    _adventureAudio = next;
+    next.play().catch(()=>{});
+    _advFade(next, ADV_VOL, ADV_FADE_MS);
+    // Cross-fade the previous track out, then stop it
+    if (old && old !== next) {
+      _advFade(old, 0, ADV_FADE_MS, () => { try { old.pause(); old.currentTime = 0; } catch(e) {} });
+    }
   } catch(e) {}
 }
 
@@ -2036,7 +2061,10 @@ function updatePresBGM(catId) {
 }
 
 function stopAdventure() {
-  if (_adventureAudio) { _adventureAudio.pause(); _adventureAudio.currentTime = 0; }
+  if (_adventureAudio) {
+    if (_adventureAudio._fadeTimer) { clearInterval(_adventureAudio._fadeTimer); _adventureAudio._fadeTimer = null; }
+    _adventureAudio.pause(); _adventureAudio.currentTime = 0;
+  }
   _adventureFile = null;
 }
 
