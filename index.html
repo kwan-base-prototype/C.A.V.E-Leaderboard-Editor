@@ -770,6 +770,55 @@ header{
 .pres-announce .ann-sub{position:relative;z-index:2;font-family:'Rajdhani',sans-serif;font-size:16px;letter-spacing:4px;color:rgba(255,255,255,.5);text-transform:uppercase;}
 .pres-announce .ann-line{width:200px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,.6),transparent);position:relative;z-index:2;}
 
+/* ── PRES INTERSTITIALS — opening rest page + closing cooldown ── */
+.pres-interstitial{
+  width:960px;height:540px;
+  position:relative;overflow:hidden;
+  transform-origin:center center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+  box-shadow:0 30px 100px rgba(0,0,0,.9);
+}
+.pres-interstitial .ann-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.32}
+.pres-interstitial .ann-overlay{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,rgba(0,0,0,.25) 0%,rgba(0,0,0,.92) 100%)}
+.pres-interstitial .ann-line{width:280px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,215,0,.6),transparent);position:relative;z-index:2;}
+.itl-kicker{position:relative;z-index:2;font-family:'Rajdhani',sans-serif;font-size:15px;letter-spacing:9px;color:rgba(255,215,0,.75);text-transform:uppercase;}
+.itl-title{position:relative;z-index:2;font-family:'Orbitron',monospace;font-weight:900;font-size:62px;letter-spacing:10px;text-transform:uppercase;color:#fff;text-align:center;text-shadow:0 0 60px rgba(255,215,0,.35);}
+.itl-sub{position:relative;z-index:2;font-family:'Rajdhani',sans-serif;font-size:17px;letter-spacing:5px;color:rgba(255,255,255,.45);text-transform:uppercase;}
+.itl-logo{width:280px;object-fit:contain;position:relative;z-index:2;filter:drop-shadow(0 0 40px rgba(255,215,0,.35));}
+.itl-hint{position:absolute;bottom:42px;z-index:2;font-family:'Rajdhani',sans-serif;font-size:14px;letter-spacing:4px;color:rgba(255,255,255,.32);text-transform:uppercase;}
+/* Slow breathing on the hint so the title card reads as "waiting", not "loading" */
+@keyframes itlBreathe{0%,100%{opacity:.5}50%{opacity:1}}
+/* Closing page settles inward rather than snapping in — the cooldown beat */
+@keyframes itlCooldown{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:scale(1)}}
+.itl-kicker-anim{animation:fadeDown .6s cubic-bezier(.2,.8,.4,1) .25s both}
+.itl-title-anim{animation:fadeUp .7s cubic-bezier(.2,.8,.4,1) .45s both}
+.itl-sub-anim{animation:fadeUp .6s cubic-bezier(.2,.8,.4,1) .7s both}
+.itl-hint-anim{animation:fadeUp .6s ease 1.1s both, itlBreathe 2.6s ease-in-out 1.7s infinite}
+/* The CAVE logo PNG has asymmetric transparent padding on all four sides, so
+   flex-centring the image BOX still leaves the artwork off-centre. Measured on
+   the 600x228 canvas: ink spans x 79..483 and y 34..218, putting its centre 19px
+   left (3.17% of width) and 12px low (5.26% of height). Correct both here rather
+   than as separate properties, because .itl-logo-anim already owns `transform`
+   and would overwrite them. translate percentages resolve against the element's
+   own size, so this stays correct if .itl-logo's width changes. */
+@keyframes itlLogoReveal{
+  from{opacity:0;transform:translate(3.17%, -5.26%) scale(.6) rotate(-8deg)}
+  to  {opacity:1;transform:translate(3.17%, -5.26%) scale(1) rotate(0deg)}
+}
+.itl-logo-anim{animation:itlLogoReveal 1s cubic-bezier(.2,.8,.4,1) .35s both, shimmer 3.4s ease-in-out 1.5s infinite}
+.itl-cooldown-anim{animation:itlCooldown 2.2s cubic-bezier(.2,.7,.3,1) both}
+.pres-audio-notice{
+  position:fixed;top:14px;right:14px;z-index:10020;display:none;
+  padding:9px 14px;border:1px solid rgba(255,90,90,.55);border-radius:4px;
+  background:rgba(38,0,0,.9);color:#ffb9b9;cursor:pointer;
+  font-family:'Rajdhani',sans-serif;font-size:13px;letter-spacing:1px;
+  box-shadow:0 6px 26px rgba(0,0,0,.6);
+}
+.pres-audio-notice:hover{background:rgba(70,0,0,.96);color:#fff}
+.pdot-edge{border-radius:2px;background:rgba(255,215,0,.35);}
+.pdot-edge:hover{background:rgba(255,215,0,.7)}
+.pdot-edge.active{background:#ffd700;}
+
 /* ── PRES STAGE LAYOUT ── */
 #presStage{
   position:relative;
@@ -1149,7 +1198,10 @@ const rtdb = getDatabase(app);
 let _currentUser = null;
 Object.defineProperty(window, '_currentUser', { get: () => _currentUser, set: v => { _currentUser = v; } });
 let _rtdbUnsub   = null;
-let _isSyncing   = false;
+let _rtdbLiveId  = null;   // leaderboard id the RTDB listener is currently bound to
+// Unique per browser tab. Stamped on every RTDB write so a client can recognise
+// the echo of its own push instead of guessing with a timer.
+const _clientId  = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 function setSyncStatus(state, text) {
   const dot = document.getElementById('syncDot');
@@ -1179,14 +1231,16 @@ onAuthStateChanged(auth, user => {
     const nameDisplay = user.displayName ? `${user.displayName} (${user.email})` : user.email;
     document.getElementById('syncUser').textContent = nameDisplay;
     setSyncStatus('green', 'เชื่อมต่อแล้ว');
-    subscribeRealtime(user.uid);
+    // Live sync is bound per-leaderboard inside openLeaderboard(), *after* the
+    // Firestore document has been applied. Subscribing here raced handleRoute()
+    // and could overwrite the routed leaderboard with stale live state.
     handleRoute();
   } else {
     _currentUser = null;
     document.getElementById('fbLoginOverlay').style.display = 'flex';
     document.getElementById('syncBar').style.display = 'none';
     document.getElementById('homeOverlay').style.display = 'none';
-    if (_rtdbUnsub) { _rtdbUnsub(); _rtdbUnsub = null; }
+    unsubscribeRealtime();
   }
 });
 
@@ -1279,6 +1333,8 @@ let _routerActive = false;
 Object.defineProperty(window, '_routerActive', { get: () => _routerActive, set: v => { _routerActive = v; } });
 
 window.showHome = function() {
+  // No leaderboard is open on the home screen, so nothing should be listening.
+  unsubscribeRealtime();
   if (!_routerActive) routerNavigate('/');
   document.getElementById('homeOverlay').style.display = 'flex';
   loadHomeLeaderboards();
@@ -1373,26 +1429,11 @@ window.openLeaderboard = async function(id, name) {
     if (!snap.exists()) { alert('ไม่พบข้อมูล'); return; }
     const data = snap.data();
     if (!name) name = data.name || id;
-    if (data.cats) {
-      Object.entries(data.cats).forEach(([catId, catData]) => {
-        if (!window.CATS[catId]) return;
-        catData.teams.forEach((td, i) => {
-          const t = window.CATS[catId].teams[i];
-          if (!t) return;
-          t.name = td.name; t.score = td.score;
-          t.animal = td.animal; t.color = td.color;
-          t.custom = td.custom || null;
-          t.gaugeKey = td.gaugeKey || 'gauge_1';
-          Object.assign(t.stats, td.stats);
-          td.portraits?.forEach((p, pi) => {
-            if (t.portraits[pi]) {
-              t.portraits[pi].src = p.src;
-              t.portraits[pi].alive = p.alive;
-            }
-          });
-        });
-      });
-    }
+    // Clear first: the merge below only overwrites fields the document carries,
+    // so without a reset any omitted field keeps the previously-open
+    // leaderboard's value.
+    resetCatsToDefault();
+    if (data.cats) deserializeCats(data.cats);
     window._activeLeaderboardId = id;
     window._activeLbName = name;
     // Update header
@@ -1402,14 +1443,18 @@ window.openLeaderboard = async function(id, name) {
     window._saveLbOverride = async () => {
       setSyncStatus('yellow', 'กำลังบันทึก...');
       try {
+        const cats = serializeCats();
+        assertPayloadFits(cats);
         await setDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id), {
-          name, cats: serializeCats(),
+          name, cats,
           updatedAt: serverTimestamp(), updatedBy: _currentUser.email
         }, { merge: true });
         setSyncStatus('green', 'บันทึกแล้ว ✓');
       } catch(e) { setSyncStatus('red', e.message); }
     };
     window.saveToCloud = window._saveLbOverride;
+    // Bind live sync only now that the Firestore document has been applied.
+    subscribeRealtime(_currentUser.uid, id);
     window.renderSidebar(); window.renderSlide();
     hideHome();
     if (!_routerActive) routerNavigate('/leaderboards/' + id + '/' + currentCat);
@@ -1420,12 +1465,53 @@ window.deleteLeaderboard = async function(id, name) {
   if (!confirm(`ลบ "${name}" ?\nการดำเนินการนี้ไม่สามารถยกเลิกได้`)) return;
   try {
     await deleteDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', id));
-    if (window._activeLeaderboardId === id) window._activeLeaderboardId = null;
+    if (window._activeLeaderboardId === id) {
+      window._activeLeaderboardId = null;
+      unsubscribeRealtime();
+    }
     await loadHomeLeaderboards();
   } catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
 };
 
 // ── Serialize / Deserialize CATS ──
+// Restore CATS to a pristine default in place. Team and portrait object
+// identities are preserved because render code indexes into these same arrays.
+function resetCatsToDefault() {
+  const fresh = window.makeDefaultCats();
+  Object.entries(fresh).forEach(([catId, freshCat]) => {
+    const cat = window.CATS[catId];
+    if (!cat) return;
+    freshCat.teams.forEach((ft, i) => {
+      const t = cat.teams[i];
+      if (!t) { cat.teams[i] = ft; return; }
+      t.name = ft.name; t.score = ft.score;
+      t.animal = ft.animal; t.color = ft.color;
+      t.custom = ft.custom; t.gaugeKey = ft.gaugeKey;
+      Object.keys(t.stats).forEach(k => delete t.stats[k]);
+      Object.assign(t.stats, ft.stats);
+      ft.portraits.forEach((fp, pi) => {
+        if (t.portraits[pi]) { t.portraits[pi].src = fp.src; t.portraits[pi].alive = fp.alive; }
+        else t.portraits[pi] = fp;
+      });
+      t.portraits.length = ft.portraits.length;
+    });
+    cat.teams.length = freshCat.teams.length;
+  });
+}
+
+// Firestore rejects any document over 1 MB. Uploaded team images live inline as
+// data URIs, so fail early with a message that says what to do about it.
+const FIRESTORE_DOC_BUDGET = 900 * 1024;
+function assertPayloadFits(cats) {
+  const bytes = new Blob([JSON.stringify(cats)]).size;
+  if (bytes > FIRESTORE_DOC_BUDGET) {
+    throw new Error('ข้อมูลใหญ่เกินลิมิต Firestore (' + Math.round(bytes / 1024) +
+      ' KB / 1024 KB) — กรุณาลบรูปทีมที่อัปโหลดบางรูปออก');
+  }
+}
+window._assertPayloadFits = assertPayloadFits;
+window._resetCatsToDefault = resetCatsToDefault;
+
 function serializeCats() {
   const out = {};
   Object.entries(window.CATS).forEach(([catId, cat]) => {
@@ -1473,9 +1559,11 @@ window.saveToCloud = async function() {
   if (!_currentUser) return;
   setSyncStatus('yellow', 'กำลังบันทึก...');
   try {
+    const cats = serializeCats();
+    assertPayloadFits(cats);
     await setDoc(doc(db, 'users', _currentUser.uid, 'leaderboards', window._activeLeaderboardId), {
       name: window._activeLbName || '',
-      cats: serializeCats(),
+      cats,
       updatedAt: serverTimestamp(),
       updatedBy: _currentUser.email
     }, { merge: true });
@@ -1506,35 +1594,57 @@ window.loadFromCloud = async function() {
 };
 
 // ── Realtime Database live sync ──
-function subscribeRealtime(uid) {
-  const liveRef = ref(rtdb, `live/${uid}`);
-  _rtdbUnsub = onValue(liveRef, snap => {
-    if (_isSyncing) return;
+// Scoped per leaderboard: live/{uid}/{leaderboardId}. A shared live/{uid} bucket
+// leaked one leaderboard's scores into another when switching between them.
+function subscribeRealtime(uid, lbId) {
+  unsubscribeRealtime();
+  if (!uid || !lbId) return;
+  _rtdbLiveId = lbId;
+  _rtdbUnsub = onValue(ref(rtdb, `live/${uid}/${lbId}`), snap => {
+    if (_rtdbLiveId !== lbId) return;              // a later subscribe superseded us
     const data = snap.val();
-    if (data && data.cats) {
-      deserializeCats(data.cats);
-      setSyncStatus('green', 'Sync แล้ว · ' + new Date().toLocaleTimeString('th'));
-    }
+    if (!data || !data.cats) return;
+    if (data.writer === _clientId) return;         // echo of our own push
+    deserializeCats(data.cats);
+    setSyncStatus('green', 'Sync แล้ว · ' + new Date().toLocaleTimeString('th'));
+  }, err => {
+    // Without an error handler a denied or dropped listener dies silently while
+    // the status bar stays green — the worst failure mode mid-presentation.
+    _rtdbUnsub = null; _rtdbLiveId = null;
+    setSyncStatus('red', 'Live sync หลุด: ' + (err.code || err.message));
   });
 }
 
+function unsubscribeRealtime() {
+  if (_rtdbUnsub) { _rtdbUnsub(); _rtdbUnsub = null; }
+  _rtdbLiveId = null;
+}
+window._unsubscribeRealtime = unsubscribeRealtime;
+
+// Report real socket state so a dropped connection can never read as connected.
+onValue(ref(rtdb, '.info/connected'), snap => {
+  if (!_currentUser) return;
+  if (snap.val() === false) setSyncStatus('red', 'ออฟไลน์ · ยังไม่ sync');
+  else if (_rtdbLiveId) setSyncStatus('green', 'เชื่อมต่อแล้ว');
+});
+
 let _pushTimer = null;
 window._pushToRealtime = function() {
-  if (!_currentUser) return;
+  if (!_currentUser || !window._activeLeaderboardId) return;
+  const uid = _currentUser.uid, lbId = window._activeLeaderboardId;
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(async () => {
-    _isSyncing = true;
     setSyncStatus('yellow', 'กำลัง sync...');
     try {
-      await set(ref(rtdb, `live/${_currentUser.uid}`), {
+      await set(ref(rtdb, `live/${uid}/${lbId}`), {
         cats: serializeCats(),
-        ts: Date.now()
+        ts: Date.now(),
+        writer: _clientId
       });
       setSyncStatus('green', 'Live sync ✓ · ' + new Date().toLocaleTimeString('th'));
     } catch(e) {
-      setSyncStatus('red', 'Sync ล้มเหลว');
+      setSyncStatus('red', 'Sync ล้มเหลว: ' + (e.code || e.message));
     }
-    setTimeout(() => { _isSyncing = false; }, 500);
   }, 800);
 };
 </script>
@@ -1652,17 +1762,52 @@ document.addEventListener('DOMContentLoaded', function() {
   const homeLogo = document.getElementById('homeCaveLogo');
   if (homeLogo) homeLogo.src = ASSETS.cave_logo;
   const fileInput = document.getElementById('fileInput');
-  if (fileInput) fileInput.addEventListener('change', e => {
-    if (!e.target.files[0] || !pendingUpload) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const {cat, idx} = pendingUpload;
-      CATS[cat].teams[idx].custom = ev.target.result;
+  // Uploaded team images are stored inline as data URIs inside the Firestore
+  // document, which is capped at 1 MB total across all 12 team slots. A raw
+  // phone photo blows that on its own, so downscale before storing.
+  const PORTRAIT_MAX_CHARS = 70 * 1024;   // data-URI length budget per image
+  function downscaleImage(file) {
+    return new Promise((resolve, reject) => {
+      if (!file.type.startsWith('image/')) { reject(new Error('ไฟล์นี้ไม่ใช่รูปภาพ')); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        let out = null;
+        // Step the long edge down, then quality, until it fits. JPEG because a
+        // PNG re-encode of a photo stays far too large.
+        for (const maxPx of [512, 384, 256]) {
+          const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+          canvas.width  = Math.max(1, Math.round(img.width  * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          for (const q of [0.82, 0.68, 0.52, 0.38]) {
+            out = canvas.toDataURL('image/jpeg', q);
+            if (out.length <= PORTRAIT_MAX_CHARS) { resolve(out); return; }
+          }
+        }
+        reject(new Error('รูปนี้ย่อแล้วยังใหญ่เกินไป กรุณาครอปหรือย่อรูปก่อนอัปโหลด'));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('อ่านไฟล์รูปไม่ได้')); };
+      img.src = url;
+    });
+  }
+  window._downscaleImage = downscaleImage;
+  if (fileInput) fileInput.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file || !pendingUpload) return;
+    const {cat, idx} = pendingUpload;
+    try {
+      CATS[cat].teams[idx].custom = await downscaleImage(file);
       renderSidebar(); renderSlide();
       if (window._pushToRealtime) window._pushToRealtime();
-    };
-    reader.readAsDataURL(e.target.files[0]);
-    e.target.value = '';
+    } catch(err) {
+      alert('อัปโหลดรูปไม่สำเร็จ: ' + err.message);
+    }
   });
   document.addEventListener('mousemove', () => {
     const nav = document.getElementById('presNav');
@@ -1992,6 +2137,19 @@ function stopFanfare() {
   if (_fanfareAudio) { _fanfareAudio.pause(); _fanfareAudio.currentTime = 0; }
 }
 
+// How long the closing page takes to ramp the BGM down to silence.
+const PRES_COOLDOWN_MS = 5000;
+// Ramp the BGM down instead of cutting it, so the closing CAVE logo reads as a
+// cooldown rather than a crash stop. Built on _advFade so it shares the
+// per-element timer with the cross-fade in playAdventure — a module-level timer
+// here would be silently clobbered by that cross-fade. Stepping back out of the
+// outro re-enters playAdventure, which ramps the same element back to ADV_VOL.
+function fadeOutAdventure(ms = PRES_COOLDOWN_MS) {
+  const a = _adventureAudio;
+  if (!a || a.paused) return;
+  _advFade(a, 0, ms, () => stopAdventure());
+}
+
 // Dedicated sound for the 1ST PLACE reveal
 let _fanfareFirstAudio = null;
 function playFanfareFirst() {
@@ -2009,6 +2167,68 @@ function playRevealSound(rankShown) {
   else playFanfare();
 }
 
+// ── BGM failure reporting ──
+// Every BGM failure used to be swallowed twice (a .catch(()=>{}) on play() plus a
+// bare try/catch, and no 'error' listener anywhere), so a track that failed to
+// load or was blocked by autoplay policy just meant silence with no clue why.
+function setAudioNotice(msg) {
+  let el = document.getElementById('presAudioNotice');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'presAudioNotice';
+    el.className = 'pres-audio-notice';
+    // Clicking is itself a user gesture, so it doubles as the autoplay unlock.
+    el.addEventListener('click', () => {
+      const f = _adventureFile || _pendingTrack;
+      if (f) { _adventureFile = null; playAdventure(f); }
+    });
+    document.getElementById('presOverlay').appendChild(el);
+  }
+  el.textContent = '🔇 ' + msg;
+  el.style.display = 'block';
+}
+function clearAudioNotice() {
+  const el = document.getElementById('presAudioNotice');
+  if (el) el.style.display = 'none';
+}
+
+// Adventure Cut is only ever reached at the LAST category, so it used to be
+// fetched live in front of the audience — 1.4 MB over venue wifi, heard as the
+// music dropping out at MOST EFFECTIVE TEAM. Warm both tracks up front.
+const PRES_TRACKS = ['Adventure Main.mp3', 'Adventure Cut.mp3'];
+const _warmed = [];   // keep references so the elements aren't garbage collected
+function preloadPresTracks() {
+  if (_warmed.length) return;
+  PRES_TRACKS.forEach(f => {
+    const a = new Audio(encodeURI(f));
+    a.preload = 'auto';
+    a.muted = true;            // never audible — this only warms the HTTP cache
+    a.addEventListener('error', () => setAudioNotice('โหลดเพลงไม่ได้: ' + f));
+    a.load();
+    _warmed.push(a);
+  });
+}
+
+// Autoplay is blocked until the page has seen a user gesture, which bites when
+// the presentation is opened from a deep link or reloaded mid-run. Retry on the
+// next click or key press instead of staying silent for the rest of the step.
+let _pendingTrack = null;
+let _unlockArmed = false;
+function armAudioUnlock(file) {
+  _pendingTrack = file;
+  if (_unlockArmed) return;
+  _unlockArmed = true;
+  const unlock = () => {
+    _unlockArmed = false;
+    document.removeEventListener('pointerdown', unlock, true);
+    document.removeEventListener('keydown', unlock, true);
+    const f = _pendingTrack;
+    if (f) { _adventureFile = null; playAdventure(f); }
+  };
+  document.addEventListener('pointerdown', unlock, true);
+  document.addEventListener('keydown', unlock, true);
+}
+
 let _adventureAudio = null;
 let _adventureFile  = null;
 const ADV_VOL     = 0.8;   // target background volume
@@ -2018,35 +2238,54 @@ const ADV_FADE_MS = 1400;  // cross-fade duration when switching / starting trac
 function _advFade(audio, to, ms, onDone) {
   if (!audio) { if (onDone) onDone(); return; }
   if (audio._fadeTimer) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; }
-  const from = audio.volume;
-  const steps = 30, stepMs = Math.max(16, ms / steps);
-  let i = 0;
+  const from = audio.volume, t0 = performance.now();
+  // Drive the ramp from wall-clock time rather than a step counter: setInterval
+  // is clamped in background tabs and slips under main-thread load (confetti and
+  // slide animations fire during reveals), which would otherwise stretch a 1.4s
+  // cross-fade to tens of seconds instead of just making it coarser.
   audio._fadeTimer = setInterval(() => {
-    i++;
-    const v = from + (to - from) * (i / steps);
-    try { audio.volume = Math.max(0, Math.min(1, v)); } catch(e) {}
-    if (i >= steps) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; if (onDone) onDone(); }
-  }, stepMs);
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    try { audio.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch(e) {}
+    if (k >= 1) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; if (onDone) onDone(); }
+  }, Math.max(16, ms / 30));
 }
 
 function playAdventure(file) {
   try {
-    // Same track already playing as looping BG — keep it going seamlessly, don't restart
-    if (_adventureAudio && _adventureFile === file && !_adventureAudio.paused) return;
+    // Same track already playing as looping BG — keep it going seamlessly, don't
+    // restart. Ramp it back up, because the outro's cooldown may have faded it down.
+    if (_adventureAudio && _adventureFile === file && !_adventureAudio.paused) {
+      _advFade(_adventureAudio, ADV_VOL, ADV_FADE_MS);
+      return;
+    }
     const old = _adventureAudio;
     _adventureFile = file;
     // Start the new track silent and fade it in
-    const next = new Audio(file);
+    const next = new Audio(encodeURI(file));
     next.loop = true;
     next.volume = 0;
     _adventureAudio = next;
-    next.play().catch(()=>{});
+    next.addEventListener('error', () => setAudioNotice(
+      'โหลดเพลงไม่ได้: ' + file + (next.error ? ' (code ' + next.error.code + ')' : '')));
+    next.play().then(() => { _pendingTrack = null; clearAudioNotice(); }).catch(err => {
+      if (err && err.name === 'NotAllowedError') {
+        armAudioUnlock(file);
+        setAudioNotice('เบราว์เซอร์บล็อกเสียง — คลิกเพื่อเปิดเพลง');
+      } else {
+        // Name the file: a decode/404 failure usually arrives here as a play()
+        // rejection rather than through the element's 'error' event.
+        setAudioNotice('เล่นเพลงไม่ได้: ' + file +
+          ' (' + (err && err.name ? err.name : err) + ')');
+      }
+    });
     _advFade(next, ADV_VOL, ADV_FADE_MS);
     // Cross-fade the previous track out, then stop it
     if (old && old !== next) {
       _advFade(old, 0, ADV_FADE_MS, () => { try { old.pause(); old.currentTime = 0; } catch(e) {} });
     }
-  } catch(e) {}
+  } catch(e) {
+    setAudioNotice('เล่นเพลงไม่ได้: ' + e.message);
+  }
 }
 
 // Pick the looping background track for a given category:
@@ -2412,7 +2651,7 @@ function onFsKey(e) {
 // PRESENTATION MODE
 // ══════════════════════════════════════════════
 // Steps per category: announce → reveal3rd → reveal2nd → reveal1st(all 3 shown)
-// Total steps = 4 cats × 4 steps = 16
+// Total steps = 1 intro + (4 cats × 4 steps) + 1 outro = 18
 
 let presSteps = [];    // array of step descriptors
 let presIdx   = 0;
@@ -2420,6 +2659,9 @@ let presTimer = null;
 
 function buildPresSteps() {
   presSteps = [];
+  // Opening rest page: title card only, deliberately silent. Advancing off it
+  // is what starts the music, so the room can settle first.
+  presSteps.push({ type:'intro' });
   Object.entries(CATS).forEach(([catId, cat]) => {
     // 1) Announcement slide
     presSteps.push({ type:'announce', catId });
@@ -2430,11 +2672,44 @@ function buildPresSteps() {
     // 4) Show 1st place (all 3)
     presSteps.push({ type:'podium', catId, shown:3, rankShown:1 });
   });
+  // Closing cooldown page: CAVE logo while the BGM fades to silence.
+  presSteps.push({ type:'outro' });
 }
 
 function buildPresScale() {
-  const vw = window.innerWidth, vh = window.innerHeight - 80; // reserve 80px for nav
-  return Math.min(vw / 960, vh / 540) * 0.94;
+  // Clamp the floor: on a short viewport (or one not laid out yet, e.g. the
+  // presentation opening in a hidden tab) innerHeight - 80 went negative, which
+  // scaled the slide by a negative factor — flipping it 180° and shrinking it.
+  const vw = Math.max(1, window.innerWidth);
+  const vh = Math.max(1, window.innerHeight - 80); // reserve 80px for nav
+  return Math.max(0.1, Math.min(vw / 960, vh / 540) * 0.94);
+}
+
+// Opening rest page — no medal, no music, nothing to read but the title.
+function makeIntroHTML() {
+  return `
+    <div class="pres-interstitial" id="presContent">
+      <img class="ann-bg" src="${ASSETS.cave_bg}" alt="">
+      <div class="ann-overlay"></div>
+      <div class="ann-line itl-kicker-anim"></div>
+      <div class="itl-kicker itl-kicker-anim">Final</div>
+      <div class="itl-title itl-title-anim">Leaderboard</div>
+      <div class="itl-sub itl-sub-anim">C.A.V.E</div>
+      <div class="ann-line itl-sub-anim"></div>
+      <div class="itl-hint itl-hint-anim">กด NEXT เพื่อเริ่ม</div>
+    </div>`;
+}
+
+// Closing cooldown page — CAVE logo settling in while the BGM ramps down.
+function makeOutroHTML() {
+  return `
+    <div class="pres-interstitial itl-cooldown-anim" id="presContent">
+      <img class="ann-bg" src="${ASSETS.cave_bg}" alt="">
+      <div class="ann-overlay"></div>
+      <img class="itl-logo itl-logo-anim" src="${ASSETS.cave_logo}" alt="C.A.V.E">
+      <div class="ann-line itl-sub-anim"></div>
+      <div class="itl-sub itl-sub-anim">Thank You</div>
+    </div>`;
 }
 
 // Build announce slide HTML
@@ -2556,7 +2831,18 @@ function renderPresStep(idx) {
   newWrap.style.cssText = `transform: translate(-50%, -50%) scale(${scale});margin-left:0;margin-top:0;`;
 
   let html = '';
-  if (step.type === 'overview') {
+  if (step.type === 'intro') {
+    html = makeIntroHTML();
+    label.textContent = 'FINAL LEADERBOARD  —  พร้อมเริ่ม';
+    // Silent on purpose: the music starts on the step *after* this one.
+    stopFanfare();
+    stopAdventure();
+  } else if (step.type === 'outro') {
+    html = makeOutroHTML();
+    label.textContent = 'C.A.V.E  —  จบการนำเสนอ';
+    stopFanfare();
+    fadeOutAdventure();
+  } else if (step.type === 'overview') {
     html = makeOverviewHTML(step.catId);
     label.textContent = CATS[step.catId].label + '  —  สรุปข้อมูลทีม';
   } else if (step.type === 'announce') {
@@ -2593,7 +2879,9 @@ function updatePresProgress() {
   const el = document.getElementById('presProgress');
   el.innerHTML = presSteps.map((s,i) => {
     const active = i === presIdx;
-    return `<div class="pdot${active?' active':''}" onclick="presJump(${i})"></div>`;
+    // Square gold dots mark the two rest pages so the host can see the edges.
+    const edge = (s.type === 'intro' || s.type === 'outro') ? ' pdot-edge' : '';
+    return `<div class="pdot${active?' active':''}${edge}" onclick="presJump(${i})"></div>`;
   }).join('');
 }
 
@@ -2613,7 +2901,8 @@ function presJump(idx) {
 
 function startPresentation({ startStep = 0 } = {}) {
   buildPresSteps();
-  presIdx = startStep;
+  preloadPresTracks();
+  presIdx = Math.min(Math.max(0, startStep), presSteps.length - 1);
   const overlay = document.getElementById('presOverlay');
   const nav     = document.getElementById('presNav');
   const label   = document.getElementById('presLabel');
@@ -2625,8 +2914,13 @@ function startPresentation({ startStep = 0 } = {}) {
   overlay.style.display = 'block';
   document.addEventListener('keydown', onPresKey);
   if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/present/' + presIdx);
-  // slight delay so overlay paints black first before slide fades in
-  requestAnimationFrame(() => renderPresStep(presIdx));
+  // Let the overlay paint black before the slide fades in. rAF gives the
+  // cleanest timing but never fires while the tab is hidden, which would leave
+  // the stage blank until the host focuses the window — so back it with a timer.
+  let painted = false;
+  const paint = () => { if (painted) return; painted = true; renderPresStep(presIdx); };
+  requestAnimationFrame(paint);
+  setTimeout(paint, 120);
 }
 
 function closePresentation() {
@@ -2636,6 +2930,7 @@ function closePresentation() {
   clearTimeout(presTimer);
   stopFanfare();
   stopAdventure();
+  clearAudioNotice();
   if (!_routerActive && _activeLeaderboardId) routerNavigate('/leaderboards/' + _activeLeaderboardId + '/' + currentCat);
 }
 
