@@ -2139,20 +2139,15 @@ function stopFanfare() {
 
 // How long the closing page takes to ramp the BGM down to silence.
 const PRES_COOLDOWN_MS = 5000;
-let _fadeTimer = null;
 // Ramp the BGM down instead of cutting it, so the closing CAVE logo reads as a
-// cooldown rather than a crash stop. Any playAdventure() cancels the ramp and
-// restores full volume, so stepping back out of the outro recovers the music.
+// cooldown rather than a crash stop. Built on _advFade so it shares the
+// per-element timer with the cross-fade in playAdventure — a module-level timer
+// here would be silently clobbered by that cross-fade. Stepping back out of the
+// outro re-enters playAdventure, which ramps the same element back to ADV_VOL.
 function fadeOutAdventure(ms = PRES_COOLDOWN_MS) {
-  clearInterval(_fadeTimer); _fadeTimer = null;
   const a = _adventureAudio;
   if (!a || a.paused) return;
-  const v0 = a.volume || 0.8, t0 = performance.now();
-  _fadeTimer = setInterval(() => {
-    const k = Math.min(1, (performance.now() - t0) / ms);
-    a.volume = Math.max(0, v0 * (1 - k));
-    if (k >= 1) { clearInterval(_fadeTimer); _fadeTimer = null; stopAdventure(); }
-  }, 50);
+  _advFade(a, 0, ms, () => stopAdventure());
 }
 
 // Dedicated sound for the 1ST PLACE reveal
@@ -2236,23 +2231,43 @@ function armAudioUnlock(file) {
 
 let _adventureAudio = null;
 let _adventureFile  = null;
+const ADV_VOL     = 0.8;   // target background volume
+const ADV_FADE_MS = 1400;  // cross-fade duration when switching / starting tracks
+
+// Ramp an audio element's volume to `to` over `ms`, then run onDone (used for stop-after-fade)
+function _advFade(audio, to, ms, onDone) {
+  if (!audio) { if (onDone) onDone(); return; }
+  if (audio._fadeTimer) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; }
+  const from = audio.volume, t0 = performance.now();
+  // Drive the ramp from wall-clock time rather than a step counter: setInterval
+  // is clamped in background tabs and slips under main-thread load (confetti and
+  // slide animations fire during reveals), which would otherwise stretch a 1.4s
+  // cross-fade to tens of seconds instead of just making it coarser.
+  audio._fadeTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    try { audio.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch(e) {}
+    if (k >= 1) { clearInterval(audio._fadeTimer); audio._fadeTimer = null; if (onDone) onDone(); }
+  }, Math.max(16, ms / 30));
+}
+
 function playAdventure(file) {
   try {
-    clearInterval(_fadeTimer); _fadeTimer = null;
-    // Same track already playing as looping BG — keep it going seamlessly, don't restart
+    // Same track already playing as looping BG — keep it going seamlessly, don't
+    // restart. Ramp it back up, because the outro's cooldown may have faded it down.
     if (_adventureAudio && _adventureFile === file && !_adventureAudio.paused) {
-      _adventureAudio.volume = 0.8;   // the outro's cooldown may have faded it down
+      _advFade(_adventureAudio, ADV_VOL, ADV_FADE_MS);
       return;
     }
-    if (_adventureAudio) { _adventureAudio.pause(); _adventureAudio.currentTime = 0; }
+    const old = _adventureAudio;
     _adventureFile = file;
-    const a = new Audio(encodeURI(file));
-    _adventureAudio = a;
-    a.volume = 0.8;
-    a.loop = true;
-    a.addEventListener('error', () => setAudioNotice(
-      'โหลดเพลงไม่ได้: ' + file + (a.error ? ' (code ' + a.error.code + ')' : '')));
-    a.play().then(() => { _pendingTrack = null; clearAudioNotice(); }).catch(err => {
+    // Start the new track silent and fade it in
+    const next = new Audio(encodeURI(file));
+    next.loop = true;
+    next.volume = 0;
+    _adventureAudio = next;
+    next.addEventListener('error', () => setAudioNotice(
+      'โหลดเพลงไม่ได้: ' + file + (next.error ? ' (code ' + next.error.code + ')' : '')));
+    next.play().then(() => { _pendingTrack = null; clearAudioNotice(); }).catch(err => {
       if (err && err.name === 'NotAllowedError') {
         armAudioUnlock(file);
         setAudioNotice('เบราว์เซอร์บล็อกเสียง — คลิกเพื่อเปิดเพลง');
@@ -2263,6 +2278,11 @@ function playAdventure(file) {
           ' (' + (err && err.name ? err.name : err) + ')');
       }
     });
+    _advFade(next, ADV_VOL, ADV_FADE_MS);
+    // Cross-fade the previous track out, then stop it
+    if (old && old !== next) {
+      _advFade(old, 0, ADV_FADE_MS, () => { try { old.pause(); old.currentTime = 0; } catch(e) {} });
+    }
   } catch(e) {
     setAudioNotice('เล่นเพลงไม่ได้: ' + e.message);
   }
@@ -2280,8 +2300,10 @@ function updatePresBGM(catId) {
 }
 
 function stopAdventure() {
-  clearInterval(_fadeTimer); _fadeTimer = null;
-  if (_adventureAudio) { _adventureAudio.pause(); _adventureAudio.currentTime = 0; }
+  if (_adventureAudio) {
+    if (_adventureAudio._fadeTimer) { clearInterval(_adventureAudio._fadeTimer); _adventureAudio._fadeTimer = null; }
+    _adventureAudio.pause(); _adventureAudio.currentTime = 0;
+  }
   _adventureFile = null;
 }
 
