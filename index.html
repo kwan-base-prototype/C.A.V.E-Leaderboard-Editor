@@ -464,6 +464,7 @@ header{
   position:absolute;
   top:52px;bottom:0;left:0;right:0;
   display:flex;align-items:flex-end;
+  --p1-lift:36px;            /* head room added to the 1st-place card */
   justify-content:center;
   gap:12px;
   padding:0 20px 16px;
@@ -590,6 +591,53 @@ header{
 .sp-val{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:#fff;line-height:1}
 .sp-unit{font-size:9px;color:rgba(200,220,255,.6)}
 
+/* ── LBM/S FLOW GAUGE ──
+   Fills the width of its stat panel up to --gauge-max so the dial reads clearly
+   on the roomy DNR cards. Only the normal layout uses these classes — the
+   compact layout (Most Effective) builds its own 30px gauge inline. */
+.flow-gauge{
+  position:relative;flex-shrink:0;
+  width:100%;max-width:var(--gauge-max,84px);
+  aspect-ratio:1/1;margin:0 auto;
+}
+.flow-gauge img{width:100%;height:100%;object-fit:contain;display:block}
+.fg-readout{
+  position:absolute;bottom:21%;left:50%;transform:translateX(-50%);
+  font-family:'Orbitron',monospace;font-weight:700;color:#fff;
+  white-space:nowrap;text-align:center;line-height:1.1;
+  font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.9);
+}
+.fg-unit{font-size:8px;opacity:.7;letter-spacing:.5px}
+.fg-label{font-size:7px}
+/* 1st place gets the bigger dial, like its score and portraits */
+.pslot.p1 .flow-gauge{--gauge-max:96px}
+.pslot.p1 .fg-readout{font-size:15px}
+.pslot.p1 .fg-unit{font-size:9px}
+
+/* The taller gauge stretches its whole row, so centre the panel next to it
+   instead of leaving its value stranded at the top, and size the count to
+   match the dial's presence. */
+.stat-panel.hole-panel{display:flex;flex-direction:column}
+/* Count and icons read as one centred group. flex-wrap matters for a wide
+   count (10+ holes): the icons drop onto their own centred line rather than
+   being squeezed to one-per-row, which would grow the panel tall enough to
+   overflow the slide. */
+.hole-panel .hole-body{
+  flex:1;display:flex;flex-direction:row;flex-wrap:wrap;
+  align-items:center;align-content:center;
+  justify-content:center;gap:4px 8px;
+}
+.hole-panel .sp-row{flex-shrink:0}
+.hole-panel .sp-val{font-size:36px}
+.hole-grid{display:flex;flex-wrap:wrap;gap:3px}
+.hole-panel .hole-grid{
+  flex:0 1 auto;min-width:0;
+  justify-content:center;align-content:center;
+}
+.hole-icon{width:16px;height:16px;object-fit:contain}
+.pslot.p1 .hole-panel .sp-val{font-size:44px}
+.pslot.p1 .hole-icon{width:18px;height:18px}
+
 /* ── DISTANCE SLIDER ── */
 .dist-panel{min-width:85px}
 .dist-slider-track{position:relative;height:7px;background:rgba(255,255,255,.12);
@@ -612,33 +660,70 @@ header{
 .skull-count{font-family:'Orbitron',monospace;font-size:18px;font-weight:700;
   color:#fff;line-height:1}
 .skull-unit{font-size:9px;color:rgba(200,220,255,.6)}
-.skull-grid{display:flex;flex-wrap:wrap;gap:3px}
-.skull-icon{width:16px;height:16px;object-fit:contain}
+.skull-grid{display:flex;flex-wrap:nowrap;align-items:center;gap:3px;overflow:hidden}
+.skull-icon{width:16px;height:16px;object-fit:contain;flex-shrink:0}
+/* Whatever does not fit on the single row is summed up here by fitSkullRow(). */
+.skull-more{
+  flex-shrink:0;font-family:'Orbitron',monospace;font-weight:700;
+  font-size:10px;line-height:1;color:rgba(255,255,255,.8);
+  background:rgba(255,255,255,.12);border-radius:3px;padding:3px 4px;
+  white-space:nowrap;
+}
 
-/* ── COMPACT (Most Effective — many stats) ── */
-.pslot.compact .team-card{gap:4px;padding:7px 10px 10px}
-.pslot.compact .rank-num{font-size:110px!important;top:-18px!important}
-.pslot.compact.p1 .rank-num{font-size:130px!important}
-.pslot.compact .tlogo{width:52px!important;height:52px!important;border-radius:50%!important}
-.pslot.compact.p1 .tlogo{width:64px!important;height:64px!important;border-radius:50%!important}
-.pslot.compact .tname{font-size:11px!important}
-.pslot.compact .score-box{font-size:12px!important;padding:3px 7px!important}
-.pslot.compact.p1 .score-box{font-size:15px!important}
-.pslot.compact .member-avatar{width:26px!important;height:26px!important}
-.pslot.compact.p1 .member-avatar{width:32px!important;height:32px!important}
-.pslot.compact .members-row{gap:3px}
-.pslot.compact .stat-panel{padding:3px 5px}
-.pslot.compact .sp-label{font-size:6.5px}
-.pslot.compact .sp-val{font-size:11px!important}
-.pslot.compact .dist-slider-track{height:5px}
-.pslot.compact .skull-panel{padding:3px 6px}
-.pslot.compact .skull-label{font-size:6.5px}
-.pslot.compact .skull-count{font-size:13px!important}
-.pslot.compact .skull-icon{width:11px!important;height:11px!important}
-.pslot.compact .skull-count-row{margin-bottom:2px}
+/* ── COMPACT (Most Effective — many stats) ──
+   Eight stats per card, so everything is smaller than the normal layout — but
+   collapsing the deceased rows to a single line freed a lot of height, so the
+   whole scale is set here in one place rather than inline in the builders. */
+.pslot.compact .team-card{gap:6px;padding:9px 12px 12px}
+.pslot.compact .rank-num{font-size:125px!important;top:-20px!important}
+.pslot.compact.p1 .rank-num{font-size:150px!important}
+.pslot.compact .tlogo{width:60px!important;height:60px!important;border-radius:50%!important}
+.pslot.compact.p1 .tlogo{width:74px!important;height:74px!important;border-radius:50%!important}
+.pslot.compact .tname{font-size:13px!important}
+.pslot.compact .score-box{font-size:16px!important;padding:4px 9px!important}
+.pslot.compact.p1 .score-box{font-size:20px!important}
+.pslot.compact .member-avatar{width:32px!important;height:32px!important}
+.pslot.compact.p1 .member-avatar{width:40px!important;height:40px!important}
+.pslot.compact .members-row{gap:4px}
+.pslot.compact .stat-panel{padding:5px 7px}
+.pslot.compact .sp-label{font-size:8px}
+.pslot.compact .sp-val{font-size:16px!important}
+.pw-row{display:flex;gap:6px;align-items:baseline}
+.pslot.compact.p1 .sp-val{font-size:19px!important}
+.pslot.compact .pw-sep{font-size:11px;color:rgba(255,255,255,.3)}
+.pslot.compact .dist-slider-track{height:7px}
+.pslot.compact .flow-gauge{--gauge-max:60px}
+.pslot.compact.p1 .flow-gauge{--gauge-max:72px}
+.pslot.compact .fg-readout{font-size:10px}
+.pslot.compact.p1 .fg-readout{font-size:12px}
+.pslot.compact .fg-unit{font-size:6.5px}
+.pslot.compact .fg-label{font-size:8px}
+.pslot.compact .hole-panel .sp-val{font-size:34px!important}
+.pslot.compact.p1 .hole-panel .sp-val{font-size:40px!important}
+.pslot.compact .hole-icon{width:18px;height:18px}
+.pslot.compact.p1 .hole-icon{width:20px;height:20px}
+.pslot.compact .skull-panel{padding:5px 7px}
+.pslot.compact .skull-label{font-size:8px}
+.pslot.compact .skull-count{font-size:18px!important}
+.pslot.compact.p1 .skull-count{font-size:21px!important}
+.pslot.compact .skull-icon{width:14px!important;height:14px!important}
+.pslot.compact .skull-count-row{margin-bottom:3px}
+.pslot.compact .skull-more{font-size:9px;padding:2px 3px}
+.skull-row-compact{display:flex;gap:4px}
+.skull-row-compact > .skull-panel{flex:1;min-width:0}
 .pslot.p2.compact,.pslot.p3.compact{width:256px}
 .pslot.p1.compact{width:320px}
-.podium.has-compact{align-items:center;padding-bottom:8px}
+.podium.has-compact{align-items:flex-end;padding-bottom:8px;--p1-lift:26px}
+
+/* --- 1ST PLACE RISER ---
+   Every card sits on one baseline (.podium is align-items:flex-end), so the
+   only way to raise 1st place is to make its card taller. The head room goes
+   above the content, where the giant rank number and the logo sit.
+   applyFirstRiser() tops this up to max(2nd,3rd) + --p1-lift at render time,
+   because the other cards grow with their stat content (wrapping skull rows)
+   and can otherwise end up taller than 1st. */
+.pslot.p1 .team-card{padding-top:calc(10px + var(--p1-lift));justify-content:flex-end}
+.pslot.p1.compact .team-card{padding-top:calc(7px + var(--p1-lift))}
 
 /* Scale handled by JS dynamically */
 @media(max-width:1100px){
@@ -2425,6 +2510,18 @@ function buildSlotHTML(catId, teamIdx, cls, rank, visible, enterAnim) {
   </div>`;
 }
 
+// The dial panel is identical in both layouts — only its --gauge-max and the
+// readout sizes differ, and those come from CSS.
+function flowPanelHTML(t, label) {
+  return `<div class="stat-panel">
+      <div class="sp-label fg-label">${label}</div>
+      <div class="flow-gauge">
+        <img src="${ASSETS[t.gaugeKey||'gauge_1']}" alt="">
+        <div class="fg-readout">${t.stats.flow}<br><span class="fg-unit">LBM/S</span></div>
+      </div>
+    </div>`;
+}
+
 function buildStatPanels(cat, t, compact=false) {
   const panels = [];
   const hasKey = (k) => cat.stats.some(s => s.key === k);
@@ -2433,39 +2530,35 @@ function buildStatPanels(cat, t, compact=false) {
     // ── COMPACT (Effective): all stats packed into 2 mini rows ──
     const pct = Math.max(0, Math.min(100, parseInt(t.stats.distPct)||85));
     const holeCount = parseInt(t.stats.hole)||0;
-    const holeIcons = Array.from({length:Math.min(holeCount,5)},()=>
-      `<img src="${ASSETS.icon_grid}" style="width:9px;height:9px;object-fit:contain" alt="">`).join('');
+    const holeIcons = Array.from({length:Math.min(holeCount,6)},()=>
+      `<img class="hole-icon" src="${ASSETS.icon_grid}" alt="">`).join('');
     return `
       <div class="stat-panels" style="gap:3px">
-        <div class="stat-panel" style="flex:1">
-          <div class="sp-label" style="font-size:6px">Picked / Waste</div>
-          <div style="display:flex;gap:5px;align-items:baseline">
-            <span class="sp-val" style="font-size:11px">${t.stats.picked||'0'}</span>
-            <span style="font-size:8px;color:rgba(255,255,255,.3)">/</span>
-            <span class="sp-val" style="font-size:11px;color:#FFD700">${t.stats.waste||'0'}</span>
+        <div class="stat-panel">
+          <div class="sp-label">Picked / Waste</div>
+          <div class="pw-row">
+            <span class="sp-val">${t.stats.picked||'0'}</span>
+            <span class="pw-sep">/</span>
+            <span class="sp-val" style="color:#FFD700">${t.stats.waste||'0'}</span>
           </div>
         </div>
-        <div class="stat-panel" style="flex:1">
-          <div class="sp-label" style="font-size:6px;margin-bottom:2px">Distance</div>
-          <div class="dist-slider-track" style="height:5px;margin:1px 0">
+        <div class="stat-panel">
+          <div class="sp-label" style="margin-bottom:2px">Distance</div>
+          <div class="dist-slider-track">
             <div class="dist-slider-fill" style="width:${pct}%"></div>
-            <div class="dist-slider-dot" style="left:calc(${pct}% - 5px);width:9px;height:9px"></div>
+            <div class="dist-slider-dot" style="left:calc(${pct}% - 6px)"></div>
           </div>
-          <span class="sp-val" style="font-size:10px">${t.stats.dist}</span>
+          <span class="sp-val">${t.stats.dist}</span>
         </div>
       </div>
       <div class="stat-panels" style="gap:3px">
-        <div class="stat-panel" style="flex:1;display:flex;align-items:center;gap:5px">
-          <div style="position:relative;width:30px;height:30px;flex-shrink:0">
-            <img style="width:100%;height:100%;object-fit:contain" src="${ASSETS[t.gaugeKey||'gauge_1']}" alt="">
-            <div style="position:absolute;bottom:3px;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:5px;font-weight:700;color:#fff;white-space:nowrap;text-align:center">${t.stats.flow}<br><span style="font-size:4.5px;opacity:.7">LBM/S</span></div>
+        ${flowPanelHTML(t, 'Flow Rate')}
+        <div class="stat-panel hole-panel">
+          <div class="sp-label">Eff. Hole</div>
+          <div class="hole-body">
+            <div class="sp-row"><span class="sp-val">${holeCount}</span></div>
+            <div class="hole-grid">${holeIcons}</div>
           </div>
-          <div><div class="sp-label" style="font-size:6px">Flow Rate</div></div>
-        </div>
-        <div class="stat-panel" style="flex:1">
-          <div class="sp-label" style="font-size:6px">Eff. Hole</div>
-          <span class="sp-val" style="font-size:12px">${holeCount}</span>
-          <div style="display:flex;flex-wrap:wrap;gap:1px;margin-top:1px">${holeIcons}</div>
         </div>
       </div>`;
   }
@@ -2493,25 +2586,21 @@ function buildStatPanels(cat, t, compact=false) {
   }
 
   if (hasKey('flow')) {
-    panels.push(`<div class="stat-panel">
-      <div class="sp-label" style="font-size:7px">LBM/S Flow Rate</div>
-      <div style="position:relative;width:52px;height:52px;flex-shrink:0">
-        <img style="width:100%;height:100%;object-fit:contain" src="${ASSETS[t.gaugeKey||'gauge_1']}" alt="">
-        <div style="position:absolute;bottom:9px;left:50%;transform:translateX(-50%);font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:#fff;white-space:nowrap;text-align:center">${t.stats.flow}<br><span style="font-size:6px;opacity:.7">LBM/S</span></div>
-      </div>
-    </div>`);
+    panels.push(flowPanelHTML(t, 'LBM/S Flow Rate'));
   }
 
   if (hasKey('hole')) {
     const holeCount = parseInt(t.stats.hole)||0;
     const holeIcons = Array.from({length:Math.min(holeCount,9)},()=>
-      `<img src="${ASSETS.icon_grid}" style="width:13px;height:13px;object-fit:contain" alt="">`).join('');
+      `<img class="hole-icon" src="${ASSETS.icon_grid}" alt="">`).join('');
     const hasBothSkulls = cat.stats.some(s=>s.key==='seal') && cat.stats.some(s=>s.key==='dnr');
     if (!hasBothSkulls) {
-      panels.push(`<div class="stat-panel">
+      panels.push(`<div class="stat-panel hole-panel">
         <div class="sp-label">Effective Hole</div>
-        <div class="sp-row"><span class="sp-val" style="font-size:18px">${holeCount}</span></div>
-        <div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">${holeIcons}</div>
+        <div class="hole-body">
+          <div class="sp-row"><span class="sp-val">${holeCount}</span></div>
+          <div class="hole-grid">${holeIcons}</div>
+        </div>
       </div>`);
     }
   }
@@ -2529,27 +2618,27 @@ function buildSkullPanel(cat, t, compact=false) {
   if (compact && (hasDnr || hasSeal)) {
     const dnrCount  = parseInt(t.stats.dnr)||0;
     const sealCount = parseInt(t.stats.seal)||0;
-    const maxIcons  = 5;
+    const maxIcons  = 8;
     const dnrIcons  = Array.from({length:Math.min(dnrCount,maxIcons)},()=>
       `<img class="skull-icon" src="${ASSETS.skull_orange}" alt="">`).join('');
     const sealIcons = Array.from({length:Math.min(sealCount,maxIcons)},()=>
       `<img class="skull-icon" src="${ASSETS.skull_red_sq}" alt="">`).join('');
-    return `<div style="display:flex;gap:4px">
-      ${hasDnr ? `<div class="skull-panel" style="flex:1">
-        <div class="skull-label" style="font-size:6px">Dec. MNR</div>
-        <div class="skull-count-row"><span class="skull-count" style="font-size:12px">${dnrCount}</span><span class="skull-unit"> P</span></div>
-        <div class="skull-grid">${dnrIcons}</div>
+    return `<div class="skull-row-compact">
+      ${hasDnr ? `<div class="skull-panel">
+        <div class="skull-label">Dec. MNR</div>
+        <div class="skull-count-row"><span class="skull-count">${dnrCount}</span><span class="skull-unit"> P</span></div>
+        <div class="skull-grid" data-total="${dnrCount}">${dnrIcons}<span class="skull-more"></span></div>
       </div>` : ''}
-      ${hasSeal ? `<div class="skull-panel" style="flex:1">
-        <div class="skull-label" style="font-size:6px">Dec. S.E.A.L.</div>
-        <div class="skull-count-row"><span class="skull-count" style="font-size:12px">${sealCount}</span><span class="skull-unit"> P</span></div>
-        <div class="skull-grid">${sealIcons}</div>
+      ${hasSeal ? `<div class="skull-panel">
+        <div class="skull-label">Dec. S.E.A.L.</div>
+        <div class="skull-count-row"><span class="skull-count">${sealCount}</span><span class="skull-unit"> P</span></div>
+        <div class="skull-grid" data-total="${sealCount}">${sealIcons}<span class="skull-more"></span></div>
       </div>` : ''}
     </div>`;
   }
 
   // Normal: stacked panels
-  const maxIcons = compact ? 8 : 15;
+  const maxIcons = compact ? 8 : 16;
   const parts = [];
   if (hasDnr) {
     const count = parseInt(t.stats.dnr)||0;
@@ -2558,18 +2647,17 @@ function buildSkullPanel(cat, t, compact=false) {
     parts.push(`<div class="skull-panel" style="margin-bottom:4px">
       <div class="skull-label">Deceased MNR</div>
       <div class="skull-count-row"><span class="skull-count">${count}</span><span class="skull-unit">People</span></div>
-      <div class="skull-grid">${icons}</div>
+      <div class="skull-grid" data-total="${count}">${icons}<span class="skull-more"></span></div>
     </div>`);
   }
   if (hasSeal) {
     const count = parseInt(t.stats.seal)||0;
-    const sealMax = !hasDnr ? 10 : maxIcons; // SEAL-only category: cap at 10
-    const icons = Array.from({length:Math.min(count,sealMax)},()=>
+    const icons = Array.from({length:Math.min(count,maxIcons)},()=>
       `<img class="skull-icon" src="${ASSETS.skull_red_sq}" alt="">`).join('');
     parts.push(`<div class="skull-panel">
       <div class="skull-label">Deceased S.E.A.L.</div>
       <div class="skull-count-row"><span class="skull-count">${count}</span><span class="skull-unit">People</span></div>
-      <div class="skull-grid">${icons}</div>
+      <div class="skull-grid" data-total="${count}">${icons}<span class="skull-more"></span></div>
     </div>`);
   }
   if (!hasSeal && !hasDnr) {
@@ -2579,10 +2667,77 @@ function buildSkullPanel(cat, t, compact=false) {
     parts.push(`<div class="skull-panel">
       <div class="skull-label">Deceased</div>
       <div class="skull-count-row"><span class="skull-count">${count}</span><span class="skull-unit">People</span></div>
-      <div class="skull-grid">${icons}</div>
+      <div class="skull-grid" data-total="${count}">${icons}<span class="skull-more"></span></div>
     </div>`);
   }
   return parts.join('');
+}
+
+// ── SKULL ROW FIT ──
+// Every deceased row stays a single line: as many icons as the panel's width
+// takes, then a "+N" chip for the rest. Widths differ per rank (and the card
+// can be rescaled), so the count that fits is measured rather than hard-coded.
+// Must run before applyFirstRiser(), since collapsing the rows changes how
+// tall the cards are.
+function fitSkullRow(grid) {
+  const icons = Array.from(grid.querySelectorAll('.skull-icon'));
+  const more  = grid.querySelector('.skull-more');
+  icons.forEach(img => { img.style.display = ''; });
+  if (more) { more.style.display = 'none'; more.textContent = ''; }
+  if (!icons.length) return;
+
+  const total = parseInt(grid.dataset.total, 10) || icons.length;
+  const avail = grid.clientWidth;
+  const gap   = parseFloat(getComputedStyle(grid).columnGap) || 0;
+  const step  = icons[0].offsetWidth + gap;
+  if (!avail || step <= gap) return;          // not laid out yet — leave as is
+
+  // Never claim to show more icons than were actually built (the markup caps
+  // how many are rendered), or the "+N" would under-count.
+  let fit = Math.min(Math.floor((avail + gap) / step), icons.length);
+  if (fit >= total) return;                   // the whole row already fits
+
+  if (more) {
+    // The chip's own width depends on how many digits it ends up showing,
+    // so settle it: size the chip, re-fit the icons, repeat once.
+    more.style.display = '';
+    for (let pass = 0; pass < 2; pass++) {
+      more.textContent = '+' + Math.max(total - fit, 1);
+      fit = Math.min(Math.max(Math.floor((avail - more.offsetWidth) / step), 0), icons.length);
+    }
+    more.textContent = '+' + (total - fit);
+  }
+  icons.forEach((img, i) => { if (i >= fit) img.style.display = 'none'; });
+}
+
+function fitSkullRows(root) {
+  if (!root) return;
+  (root.querySelectorAll ? root : document).querySelectorAll('.skull-grid').forEach(fitSkullRow);
+}
+
+// ── 1ST-PLACE RISER ──
+// The podium bottom-aligns every card, so 1st place can only be raised by
+// making its card taller. The CSS head room (--p1-lift) is only a floor:
+// 2nd/3rd grow with their own stat content (skull icons wrap onto extra rows)
+// and can out-grow 1st, so the final height is measured after every render.
+// Call this on any container that has just had podium slots written into it.
+function applyFirstRiser(root) {
+  if (!root) return;
+  const pods = root.classList && root.classList.contains('podium')
+    ? [root]
+    : Array.from(root.querySelectorAll('.podium'));
+  pods.forEach(pod => {
+    const first = pod.querySelector('.p1 .team-card');
+    if (!first) return;
+    first.style.minHeight = '';   // clear a previous run before measuring
+    // Hidden slots render empty, so during a staged reveal there may be
+    // nothing to out-rank yet — the CSS head room alone covers that case.
+    const others = Array.from(pod.querySelectorAll('.p2 .team-card, .p3 .team-card'));
+    if (!others.length) return;
+    const lift = parseFloat(getComputedStyle(pod).getPropertyValue('--p1-lift')) || 0;
+    const target = Math.max.apply(null, others.map(c => c.offsetHeight)) + lift;
+    if (target > first.offsetHeight) first.style.minHeight = target + 'px';
+  });
 }
 
 // ── SLIDE ──
@@ -2602,6 +2757,8 @@ function renderSlide() {
   const podium = document.getElementById('podium');
   podium.innerHTML = html;
   podium.className = 'podium' + (isCompact ? ' has-compact' : '');
+  fitSkullRows(podium);
+  applyFirstRiser(podium);
 }
 
 // ── EXPORT ──
@@ -2808,6 +2965,8 @@ function renderPresStep(idx) {
             const isNew = rank === rankToReveal;
             return buildSlotHTML(step.catId, teamIdx, cls, rank, rankVisible, isNew);
           }).join('');
+          fitSkullRows(podiumEl);
+          applyFirstRiser(podiumEl);
         }
       }
       // Update label and progress
@@ -2868,6 +3027,8 @@ function renderPresStep(idx) {
   });
 
   stage.appendChild(newWrap);
+  fitSkullRows(newWrap);
+  applyFirstRiser(newWrap);
 
   label.style.opacity = '1';
   clearTimeout(presTimer);
